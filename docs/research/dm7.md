@@ -164,12 +164,16 @@
   - 아웃풋 패치 샘플 `outpatch2`도 바이트까지 같다. `outpatch`의 Mix 2 → Dante OUT 1 값도 같다.
   - 사용자가 DM Editor에서 직접 한 6단계 변경(이름, 컬러, 패치, 페어·DCA·뮤트, 48V OMNI, 48V Dante)을 OnePatch로 똑같이 넣었을 때, Current 데이터가 UUID를 빼고 **바이트까지 같다**.
   - 고치지 않고 다시 쓰면 원본 파일과 바이트까지 같다.
-- **남은 검증:** 내려받은 파일을 실제 DM Editor와 콘솔이 여는지
+- **실기 검증 (2026-11-18)**
+  - DM Editor 2.x: OnePatch가 쓴 파일이 열리고, 다시 저장해도 Current 데이터는 그대로 🔬. 셋업은 화면 상태 2바이트만 다름.
+  - DM Editor에서 인풋(이름·컬러·패치·페어·DCA)·아웃풋 패치·버스·DCA·뮤트 이름이 기대값대로 표시됨 (사용자 확인)
+  - **DM7 Compact 콘솔(FW V2.1)에서 USB로 불러오기 성공** (사용자 확인)
+  - 아직: 콘솔 화면의 항목별 확인, 한글 이름 표시, 실제 신호·48V 확인, Rio 연결 상태 샘플 (8-C)
 
 ## 6. 남은 확인 사항
 
 - Dante I/O의 유닛 번호와 실제 Rio 장치의 대응 (실제 Rio가 연결된 쇼 파일 필요)
-- 아웃풋 패치의 버스 소스 번호 (`outpatch.dmxf`: Mix 1 → OMNI OUT 1, Mix 2 → Dante OUT 1 샘플 필요)
+- Stereo B R의 출력 소스 번호
 - 파일 컬러 `LtGreen`/`White`와 OSC 컬러 `Cyan`/`Magenta`의 관계
-- 직접 작성한 파일을 DM Editor와 콘솔이 여는지 (8-B에서 확인)
+- 콘솔에서 한글 이름이 어떻게 보이는지 (Name Language 설정별)
 - 콘솔 V2.1이 V1의 `.dm7f`를 불러오는지
