@@ -148,9 +148,16 @@
   - **Stereo B**의 R 소스 번호 (L은 `0x04200010`으로 확인, R은 샘플 없음 → 쓰지 않음)
   - 스테레오 Mix·Matrix의 페어(Bus Setup) 설정 위치 — OnePatch는 출력 패치만 쓴다
 
+### 4.5 버스·DCA·뮤트 그룹 이름 (샘플 `busmane`: Mix 1 `WEDGE1`, DCA 1 `DRUMS`, 뮤트 그룹 1 `BUSMANE`)
+
+- 위치: `Mixing/{Mix[48], Matrix[12], Stereo[4], DCA[24]}/Label/{Name, Color, Icon}` — 인풋과 같은 모양(64 + 8 + 12바이트). `Mixing/Mute[12]/Label/Name`(64)만 이름뿐 🔬
+- 기본 이름: `MX 1`, `MT 1`, `ST A`(Stereo 4개: A L, A R, B L, B R), `DCA 1`, `Mute 1`
+- Mix·Matrix·Stereo에도 `DCA/Assign`, `MuteGroup/Assign` 비트가 있다(샘플에서 Mix 1 뮤트 배정이 함께 바뀜) — OnePatch 아웃풋에는 아직 DCA·뮤트 항목이 없어 쓰지 않음
+
 ## 5. 8-B 구현과 검증
 
 - **구현 위치:** `src/export/dm7/` (container, mbdf, dm7Export), 화면 `/shows/[id]/console`
+- **버스·DCA·뮤트 그룹 이름:** 아웃풋 패치와 같은 번호 배정을 따라 이름(8자)을 쓴다. 스테레오 버스는 Mix 두 개에 같은 이름을 쓴다. 빈 이름이면 파일의 기본 이름을 그대로 둔다.
 - **아웃풋 패치:** Aux는 표의 행 순서대로 Mix 번호를 받고, 스테레오 버스는 홀수에서 시작하는 두 개를 받는다. Matrix도 같은 방식이다. 첫 스테레오 Main은 Stereo A. 박스 출력은 "Dante OUT 시작 번호" 설정으로, Local은 OMNI OUT으로 간다. 쓰지 않는 출력을 "없음"으로 비울지 고를 수 있다.
 - **방식:** 사용자가 DM Editor에서 저장한 파일의 `CurrentBackupFile.bup`(과 `.old`)만 고쳐 쓴다. 다른 블록은 원래 압축 바이트를 그대로 둔다.
 - **검증** (`src/__tests__/dm7.test.ts`, 샘플이 있을 때만 실행)

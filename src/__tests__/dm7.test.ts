@@ -59,7 +59,7 @@ function showFor(stage: "name" | "color" | "patch" | "link" | "48V_local" | "48V
 function itemsFor(stage: string): Record<Dm7Item, boolean> {
   const order = ["name", "color", "patch", "link", "48V_local", "48V_dante"];
   const at = (s: string) => order.indexOf(stage) >= order.indexOf(s);
-  return { name: true, color: at("color"), icon: false, patch: at("patch"), phantom: at("48V_local"), pair: at("link"), dca: at("link"), mute: at("link"), outPatch: false };
+  return { name: true, color: at("color"), icon: false, patch: at("patch"), phantom: at("48V_local"), pair: at("link"), dca: at("link"), mute: at("link"), outPatch: false, busNames: false };
 }
 
 describe.skipIf(!have)("DM7 쇼 파일 (샘플 필요)", () => {
@@ -121,7 +121,7 @@ describe.skipIf(!have)("DM7 쇼 파일 (샘플 필요)", () => {
 });
 
 const haveOut = have && existsSync(join(DIR, "outpatch2.dmxf"));
-const onlyOut: Record<Dm7Item, boolean> = { name: false, color: false, icon: false, patch: false, phantom: false, pair: false, dca: false, mute: false, outPatch: true };
+const onlyOut: Record<Dm7Item, boolean> = { name: false, color: false, icon: false, patch: false, phantom: false, pair: false, dca: false, mute: false, outPatch: true, busNames: false };
 
 describe.skipIf(!haveOut)("DM7 아웃풋 패치 (샘플 필요)", () => {
   it("Matrix 1 → OMNI OUT 1, Stereo L/R → OMNI OUT 2/3: DM Editor 결과와 바이트까지 같다", () => {
@@ -179,5 +179,37 @@ describe("DM7 버스 배정", () => {
       "Front Fill=Matrix 1", "Delay=Matrix 3/4", "Rec=Matrix 5/6", "Main LR=Stereo A",
     ]);
     expect(warnings.join()).toMatch(/Bus Setup/);
+  });
+});
+
+const BUSNAME = join(DIR, "busmane.dm7f.dmxf");
+describe.skipIf(!have || !existsSync(BUSNAME))("DM7 버스·DCA·뮤트 이름 (샘플 필요)", () => {
+  it("Mix 1 WEDGE1, DCA 1 DRUMS, 뮤트 1 BUSMANE: DM Editor 결과와 같다 (샘플에서 함께 바뀐 Mix 1 뮤트 배정 1바이트 제외)", () => {
+    let show = createEmptyShow();
+    show = rowOps(busAccess("aux")).append(show);
+    show = updateBus(show, "aux", 0, { name: "WEDGE1" });
+    show = updateBus(show, "main", 0, { name: "" });
+    show = updateBus(show, "main", 1, { name: "" });
+    show = { ...show, dcas: [{ id: "d1", number: 1, name: "DRUMS" }], muteGroups: [{ id: "m1", number: 1, name: "BUSMANE" }] };
+    const items = { ...onlyOut, outPatch: false, busNames: true };
+    const plan = planDm7(show, load("basic"), { ...defaultDm7Options(show), items });
+    const expected = current(parseDm7File(new Uint8Array(readFileSync(BUSNAME))));
+    const mute = locate(section(parseSections(expected), "Mixing"), [["Mix", 0], "MuteGroup", "Assign"]).pos;
+    const diff = [...body(plan.current)].flatMap((v, i) => (v !== body(expected)[i] ? [i + 0x48] : []));
+    expect(diff).toEqual([mute]);
+    expect(plan.changes.map((c) => `${c.target} ${c.before} → ${c.after}`)).toEqual([
+      "Mix 1 MX 1 → WEDGE1",
+      "DCA 1 DCA 1 → DRUMS",
+      "뮤트 그룹 1 Mute 1 → BUSMANE",
+    ]);
+  });
+
+  it("샘플 Show: 스테레오 버스는 두 Mix 모두, Main은 Stereo A L/R, 8자 넘으면 자르기", () => {
+    const show = createSampleShow();
+    const items = { ...onlyOut, outPatch: false, busNames: true };
+    const plan = planDm7(show, load("basic"), { ...defaultDm7Options(show), items });
+    const names = plan.changes.map((c) => `${c.target}=${c.after}`);
+    expect(names).toEqual(expect.arrayContaining(["Mix 1=Lead Vo", "Mix 5=Drum IEM", "Mix 6=Drum IEM", "Stereo A L=Main LR", "Stereo A R=Main LR", "DCA 1=Drums", "뮤트 그룹 1=Band"]));
+    expect(plan.warnings.join("\n")).toMatch(/Lead Vo Wedge.*8자/);
   });
 });

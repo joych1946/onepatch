@@ -76,7 +76,7 @@ function iconFor(show: Show, ch: Show["inputs"][number]): string | null {
 
 /* ───────────── 설정 ───────────── */
 
-export type Dm7Item = "name" | "color" | "icon" | "patch" | "phantom" | "pair" | "dca" | "mute" | "outPatch";
+export type Dm7Item = "name" | "color" | "icon" | "patch" | "phantom" | "pair" | "dca" | "mute" | "outPatch" | "busNames";
 export const DM7_ITEMS: { key: Dm7Item; label: string; note?: string }[] = [
   { key: "name", label: "이름", note: "짧은 이름(없으면 소스명), 8자" },
   { key: "color", label: "컬러" },
@@ -87,6 +87,7 @@ export const DM7_ITEMS: { key: Dm7Item; label: string; note?: string }[] = [
   { key: "dca", label: "DCA 배정" },
   { key: "mute", label: "뮤트 그룹 배정" },
   { key: "outPatch", label: "아웃풋 패치", note: "Mix·Matrix·Stereo → OMNI/Dante OUT" },
+  { key: "busNames", label: "버스·DCA·뮤트 그룹 이름", note: "8자" },
 ];
 
 export interface Dm7BoxSetting {
@@ -115,7 +116,7 @@ export function defaultDm7Options(show: Show): Dm7Options {
     nextOut += b.outputs;
   });
   return {
-    items: { name: true, color: true, icon: false, patch: true, phantom: true, pair: true, dca: true, mute: true, outPatch: true },
+    items: { name: true, color: true, icon: false, patch: true, phantom: true, pair: true, dca: true, mute: true, outPatch: true, busNames: true },
     boxes,
     clearUnusedOutputs: false,
   };
@@ -325,7 +326,57 @@ export function planDm7(show: Show, file: Dm7File, opts: Dm7Options): Dm7Plan {
     }
   }
   const busMap = I.outPatch ? planOutputs(show, cur, processing, opts, changes, warn) : [];
+  if (I.busNames) planNames(show, cur, mixing, changes, warn);
   return { changes, warnings, current: cur, maxChannels, busMap };
+}
+
+/* ───────────── 버스·DCA·뮤트 그룹 이름 ───────────── */
+
+/** 이름 8자로 맞추기 (빈 이름이면 null = 파일의 기본 이름을 그대로 둠) */
+function fitName(raw: string, what: string, warn: (w: string) => void): string | null {
+  const t = raw.trim();
+  if (!t) return null;
+  const chars = [...t];
+  const name = chars.slice(0, DM7_NAME_MAX).join("").trimEnd();
+  if (chars.length > DM7_NAME_MAX) warn(`${what} 이름 “${t}”을(를) 8자 “${name}”로 잘랐습니다.`);
+  return name;
+}
+
+/**
+ * Mix·Matrix·Stereo·DCA·뮤트 그룹 이름 (샘플 busname으로 확인: 각 Label/Name).
+ * Mix·Matrix 번호는 아웃풋 패치와 같은 배정(allocateBuses)을 따른다.
+ * Stereo 컬렉션은 4개(A L, A R, B L, B R)라 Main 이름을 둘씩 쓴다.
+ */
+function planNames(show: Show, cur: Uint8Array, mixing: MbdfSection, changes: Dm7Change[], warn: (w: string) => void) {
+  const write = (coll: string, index: number, target: string, name: string) => {
+    const f = locate(mixing, [[coll, index], "Label", "Name"]);
+    const before = readString(cur, f);
+    if (before === name) return;
+    writeString(cur, f, name);
+    changes.push({ ch: 0, target, field: "이름", before, after: name });
+  };
+  for (const a of allocateBuses(show, warn)) {
+    const name = fitName(a.bus.name, a.label, warn);
+    if (!name) continue;
+    if (a.bus.kind === "main") {
+      const first = a.label === "Stereo A" ? 0 : 2;
+      [first, first + 1].forEach((i, k) => write("Stereo", i, `${a.label} ${k ? "R" : "L"}`, name));
+      continue;
+    }
+    const coll = a.bus.kind === "aux" ? "Mix" : "Matrix";
+    const base = a.bus.kind === "aux" ? MIX_BASE : MATRIX_BASE;
+    for (const src of a.sources) write(coll, src - base, `${coll} ${src - base + 1}`, name);
+  }
+  for (const d of show.dcas) {
+    if (d.number > DM7_DCA_COUNT) continue;
+    const name = fitName(d.name, `DCA ${d.number}`, warn);
+    if (name) write("DCA", d.number - 1, `DCA ${d.number}`, name);
+  }
+  for (const g of show.muteGroups) {
+    if (g.number > DM7_MUTE_COUNT) continue;
+    const name = fitName(g.name, `뮤트 그룹 ${g.number}`, warn);
+    if (name) write("Mute", g.number - 1, `뮤트 그룹 ${g.number}`, name);
+  }
 }
 
 /* ───────────── 아웃풋 패치 ───────────── */
