@@ -2,7 +2,7 @@
 
 /**
  * 콘솔 내보내기 (Yamaha DM7): DM Editor에서 저장한 쇼 파일을 올리면
- * 인풋 이름·컬러·아이콘·패치·48V·페어·DCA·뮤트만 OnePatch 데이터로 바꿔서 내려준다.
+ * 인풋 이름·컬러·아이콘·패치·48V·페어·DCA·뮤트와 아웃풋 패치만 OnePatch 데이터로 바꿔서 내려준다.
  */
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -29,7 +29,17 @@ export default function ConsoleExportView({ id }: { id: string }) {
       try {
         const saved = JSON.parse(localStorage.getItem(KEY(id)) ?? "null") as Dm7Options | null;
         // 저장된 설정 + 새로 생긴 박스는 기본값
-        setOpts(saved ? { items: { ...def.items, ...saved.items }, boxes: { ...def.boxes, ...saved.boxes } } : def);
+        setOpts(
+          saved
+            ? {
+                ...def,
+                ...saved,
+                items: { ...def.items, ...saved.items },
+                // 박스마다 합친다 (예전 설정에 없는 항목은 기본값)
+                boxes: Object.fromEntries(Object.entries(def.boxes).map(([k, v]) => [k, { ...v, ...saved.boxes?.[k] }])),
+              }
+            : def,
+        );
       } catch {
         setOpts(def);
       }
@@ -82,8 +92,12 @@ export default function ConsoleExportView({ id }: { id: string }) {
   const input = "rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700";
   const step = "rounded-lg border border-neutral-200 p-4 dark:border-neutral-800";
   const plan = result && "plan" in result ? result.plan : null;
+  // 인풋은 채널 번호 순, 그 뒤에 아웃풋 포트
+  const keyOf = (c: Dm7Plan["changes"][number]) => c.target ?? `Ch ${c.ch}`;
   const byCh = plan
-    ? [...new Set(plan.changes.map((c) => c.ch))].sort((a, b) => a - b).map((ch) => ({ ch, list: plan.changes.filter((c) => c.ch === ch) }))
+    ? [...new Set(plan.changes.map(keyOf))]
+        .map((key) => ({ key, list: plan.changes.filter((c) => keyOf(c) === key) }))
+        .sort((a, b) => (a.list[0].ch || 1e9) - (b.list[0].ch || 1e9))
     : [];
   const num = (v: number | null, on: (n: number | null) => void, label: string, max: number) => (
     <input
@@ -106,7 +120,7 @@ export default function ConsoleExportView({ id }: { id: string }) {
         </Link>
         <h1 className="mt-1 text-2xl font-bold">콘솔 내보내기 — Yamaha DM7</h1>
         <p className="text-neutral-500">
-          DM Editor에서 저장한 쇼 파일의 인풋 설정만 OnePatch 데이터로 바꿔 줍니다. EQ·다이내믹스·네트워크 등 나머지는 그대로입니다.
+          DM Editor에서 저장한 쇼 파일의 인풋 설정과 아웃풋 패치만 OnePatch 데이터로 바꿔 줍니다. EQ·다이내믹스·네트워크 등 나머지는 그대로입니다.
         </p>
       </header>
 
@@ -144,7 +158,8 @@ export default function ConsoleExportView({ id }: { id: string }) {
               <th className="py-1 pr-3 font-medium">박스</th>
               <th className="py-1 pr-3 font-medium">Dante 시작 번호</th>
               <th className="py-1 pr-3 font-medium">→ 범위</th>
-              <th className="py-1 font-medium">48V용 I/O 유닛 (확인 필요)</th>
+              <th className="py-1 pr-3 font-medium">48V용 I/O 유닛 (확인 필요)</th>
+              <th className="py-1 font-medium">Dante OUT 시작 번호</th>
             </tr>
           </thead>
           <tbody>
@@ -156,7 +171,11 @@ export default function ConsoleExportView({ id }: { id: string }) {
                   <td className="py-1.5 pr-3">{b.name}</td>
                   <td className="py-1.5 pr-3">{num(s.danteStart, (v) => set({ danteStart: v }), `${b.name} Dante 시작 번호`, 512)}</td>
                   <td className="py-1.5 pr-3 text-xs text-neutral-500">{s.danteStart ? `Dante ${s.danteStart}–${s.danteStart + b.inputs - 1}` : "패치 안 함"}</td>
-                  <td className="py-1.5">{num(s.ioUnit, (v) => set({ ioUnit: v }), `${b.name} I/O 유닛`, 24)}</td>
+                  <td className="py-1.5 pr-3">{num(s.ioUnit, (v) => set({ ioUnit: v }), `${b.name} I/O 유닛`, 24)}</td>
+                  <td className="py-1.5">
+                    {num(s.danteOutStart ?? null, (v) => set({ danteOutStart: v }), `${b.name} Dante OUT 시작 번호`, 144)}
+                    <span className="ml-2 text-xs text-neutral-500">{s.danteOutStart ? `${s.danteOutStart}–${s.danteOutStart + b.outputs - 1}` : ""}</span>
+                  </td>
                 </tr>
               );
             })}
@@ -175,6 +194,13 @@ export default function ConsoleExportView({ id }: { id: string }) {
             </label>
           ))}
         </div>
+        {opts.items.outPatch && (
+          <label className="mt-2 flex items-center gap-1.5">
+            <input type="checkbox" checked={!!opts.clearUnusedOutputs} onChange={(e) => update({ ...opts, clearUnusedOutputs: e.target.checked })} />
+            OnePatch에 없는 출력은 비우기
+            <span className="text-xs text-neutral-500">(OMNI OUT 전부와 박스의 Dante OUT 범위 중 쓰지 않는 포트를 “없음”으로 — 기본 패치가 엉뚱한 곳으로 나가는 것을 막음)</span>
+          </label>
+        )}
         <p className="mt-2 text-xs text-neutral-500">
           컬러 대응:{" "}
           {Object.entries(DM7_COLOR)
@@ -197,10 +223,22 @@ export default function ConsoleExportView({ id }: { id: string }) {
                 ))}
               </ul>
             )}
+            {plan.busMap.length > 0 && (
+              <details className="mb-3 text-xs">
+                <summary className="cursor-pointer text-neutral-600 dark:text-neutral-400">OnePatch 버스 → DM7 버스 ({plan.busMap.length})</summary>
+                <ul className="mt-1 grid gap-x-6 sm:grid-cols-2">
+                  {plan.busMap.map((m, i) => (
+                    <li key={i}>
+                      {m.bus} → <b>{m.dm7}</b>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
             <p className="mb-2">
               {plan.changes.length ? (
                 <>
-                  <b>{byCh.length}채널</b>, 바뀌는 값 <b>{plan.changes.length}개</b>
+                  <b>{byCh.length}곳</b>, 바뀌는 값 <b>{plan.changes.length}개</b>
                 </>
               ) : (
                 "바뀌는 내용이 없습니다 (파일이 이미 같습니다)."
@@ -211,17 +249,17 @@ export default function ConsoleExportView({ id }: { id: string }) {
                 <table className="w-full border-collapse text-left text-xs">
                   <thead className="sticky top-0 bg-neutral-100 dark:bg-neutral-900">
                     <tr>
-                      <th className="px-2 py-1.5 font-medium">Ch</th>
+                      <th className="px-2 py-1.5 font-medium">대상</th>
                       <th className="px-2 py-1.5 font-medium">항목</th>
                       <th className="px-2 py-1.5 font-medium">지금 (파일)</th>
                       <th className="px-2 py-1.5 font-medium">바뀔 값</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {byCh.flatMap(({ ch, list }) =>
+                    {byCh.flatMap(({ key, list }) =>
                       list.map((c, i) => (
-                        <tr key={`${ch}-${i}`} className={`border-t border-neutral-200 dark:border-neutral-800 ${i === 0 ? "" : "text-neutral-700 dark:text-neutral-300"}`}>
-                          <td className="px-2 py-1 font-semibold tabular-nums">{i === 0 ? ch : ""}</td>
+                        <tr key={`${key}-${i}`} className={`border-t border-neutral-200 dark:border-neutral-800 ${i === 0 ? "" : "text-neutral-700 dark:text-neutral-300"}`}>
+                          <td className="px-2 py-1 font-semibold whitespace-nowrap tabular-nums">{i === 0 ? key : ""}</td>
                           <td className="px-2 py-1">{c.field}</td>
                           <td className="px-2 py-1 text-neutral-500">{c.before}</td>
                           <td className="px-2 py-1 font-medium">{c.after}</td>

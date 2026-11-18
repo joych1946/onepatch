@@ -134,21 +134,27 @@
 - Dante I/O의 `IOUnit u`가 실제 어느 장치인지는 ❓ (샘플에서는 Dante 1 = 유닛 1, 포트 1)
 - 페어를 맺을 때 Ch3 이름이 지워진 것은 Editor 동작인지 사용자 조작인지 ❓
 
-### 4.4 아웃풋 패치 (샘플 `outpatch`: Mix 1 → OMNI OUT 1, Mix 2 → Dante OUT 1)
+### 4.4 아웃풋 패치 (샘플 `outpatch`: Mix 2 → Dante OUT 1 / `outpatch2`: Matrix 1 → OMNI OUT 1, Stereo L·R → OMNI OUT 2·3)
 
 - 위치: `Processing/{Omni[16], AES[4], PY[64], USB[32], Dante[144], Recorder[2]}/OutputPort[n]/Patch/Source` (u32, 포트 → 소스)
 - 소스 번호
   - `0x03E00000 + (n-1)` = **Mix n**: Mix 2 → Dante OUT 1이 `0x03E00001`로 저장됨 🔬
   - 기본값은 OMNI OUT n = Mix n, Dante OUT n = Mix n
+  - `0x04000000 + (n-1)` = **Matrix n** 🔬 (USB OUT 기본값도 이 계열)
+  - `0x04200000` / `0x04200001` = **Stereo (A) L / R** 🔬 (AES·Recorder 기본값)
+  - `0x04200010` = **Stereo B** (L) 🔬 (샘플 `outpatch3`: Stereo B → OMNI OUT 1)
   - "없음" = `0x00000000` 🔬 (샘플에서 OMNI OUT 2와 Dante OUT 2–4는 사용자가 직접 "없음"으로 바꿈 → Editor가 자동으로 지우지 않음)
 - 미확인 ❓
-  - `0x04000000+n`(USB 기본), `0x04200000+n`(AES·Recorder 기본)은 Stereo·Matrix 계열로 추정되지만 미확인이다.
+  - **Stereo B**의 R 소스 번호 (L은 `0x04200010`으로 확인, R은 샘플 없음 → 쓰지 않음)
+  - 스테레오 Mix·Matrix의 페어(Bus Setup) 설정 위치 — OnePatch는 출력 패치만 쓴다
 
 ## 5. 8-B 구현과 검증
 
 - **구현 위치:** `src/export/dm7/` (container, mbdf, dm7Export), 화면 `/shows/[id]/console`
+- **아웃풋 패치:** Aux는 표의 행 순서대로 Mix 번호를 받고, 스테레오 버스는 홀수에서 시작하는 두 개를 받는다. Matrix도 같은 방식이다. 첫 스테레오 Main은 Stereo A. 박스 출력은 "Dante OUT 시작 번호" 설정으로, Local은 OMNI OUT으로 간다. 쓰지 않는 출력을 "없음"으로 비울지 고를 수 있다.
 - **방식:** 사용자가 DM Editor에서 저장한 파일의 `CurrentBackupFile.bup`(과 `.old`)만 고쳐 쓴다. 다른 블록은 원래 압축 바이트를 그대로 둔다.
 - **검증** (`src/__tests__/dm7.test.ts`, 샘플이 있을 때만 실행)
+  - 아웃풋 패치 샘플 `outpatch2`도 바이트까지 같다. `outpatch`의 Mix 2 → Dante OUT 1 값도 같다.
   - 사용자가 DM Editor에서 직접 한 6단계 변경(이름, 컬러, 패치, 페어·DCA·뮤트, 48V OMNI, 48V Dante)을 OnePatch로 똑같이 넣었을 때, Current 데이터가 UUID를 빼고 **바이트까지 같다**.
   - 고치지 않고 다시 쓰면 원본 파일과 바이트까지 같다.
 - **남은 검증:** 내려받은 파일을 실제 DM Editor와 콘솔이 여는지

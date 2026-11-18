@@ -11,7 +11,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { blockData, buildDm7File, findBlock, parseDm7File, type Dm7File } from "@/export/dm7/container";
 import { locate, parseSections, section } from "@/export/dm7/mbdf";
-import { applyDm7, defaultDm7Options, planDm7, type Dm7Item } from "@/export/dm7/dm7Export";
+import { allocateBuses, applyDm7, defaultDm7Options, planDm7, type Dm7Item } from "@/export/dm7/dm7Export";
+import { createSampleShow } from "@/sample/fivePieceBand";
+import { busAccess, rowOps, updateBus } from "@/model/outputOps";
 import { createEmptyShow } from "@/model/factory";
 import { newChannel } from "@/model/inputOps";
 import type { Color, InputChannel, Show } from "@/model/schema";
@@ -57,7 +59,7 @@ function showFor(stage: "name" | "color" | "patch" | "link" | "48V_local" | "48V
 function itemsFor(stage: string): Record<Dm7Item, boolean> {
   const order = ["name", "color", "patch", "link", "48V_local", "48V_dante"];
   const at = (s: string) => order.indexOf(stage) >= order.indexOf(s);
-  return { name: true, color: at("color"), icon: false, patch: at("patch"), phantom: at("48V_local"), pair: at("link"), dca: at("link"), mute: at("link") };
+  return { name: true, color: at("color"), icon: false, patch: at("patch"), phantom: at("48V_local"), pair: at("link"), dca: at("link"), mute: at("link"), outPatch: false };
 }
 
 describe.skipIf(!have)("DM7 쇼 파일 (샘플 필요)", () => {
@@ -115,5 +117,67 @@ describe.skipIf(!have)("DM7 쇼 파일 (샘플 필요)", () => {
     expect(fields).toContain("5 48V (OMNI 1): 꺼짐 → 켜짐");
     expect(plan.warnings.join("\n")).toMatch(/8자/);
     expect(plan.warnings.join("\n")).toMatch(/72채널/);
+  });
+});
+
+const haveOut = have && existsSync(join(DIR, "outpatch2.dmxf"));
+const onlyOut: Record<Dm7Item, boolean> = { name: false, color: false, icon: false, patch: false, phantom: false, pair: false, dca: false, mute: false, outPatch: true };
+
+describe.skipIf(!haveOut)("DM7 아웃풋 패치 (샘플 필요)", () => {
+  it("Matrix 1 → OMNI OUT 1, Stereo L/R → OMNI OUT 2/3: DM Editor 결과와 바이트까지 같다", () => {
+    let show = createEmptyShow(); // Main L/R(스테레오), Mono/Sub
+    show = updateBus(show, "main", 0, { ports: [{ kind: "local", port: 2 }, { kind: "local", port: 3 }] });
+    show = rowOps(busAccess("matrix")).append(show);
+    show = updateBus(show, "matrix", 0, { ports: [{ kind: "local", port: 1 }] });
+    const plan = planDm7(show, load("basic"), { ...defaultDm7Options(show), items: onlyOut });
+    const expected = current(parseDm7File(new Uint8Array(readFileSync(join(DIR, "outpatch2.dmxf")))));
+    expect(Buffer.from(body(plan.current)).equals(Buffer.from(body(expected)))).toBe(true);
+    expect(plan.changes.map((c) => `${c.target} ${c.before} → ${c.after}`)).toEqual([
+      "OMNI OUT 1 Mix 1 → Matrix 1",
+      "OMNI OUT 2 Mix 2 → Stereo A L",
+      "OMNI OUT 3 Mix 3 → Stereo A R",
+    ]);
+  });
+
+  it.skipIf(!existsSync(join(DIR, "outpatch.dmxf")))("Mix 2 → Dante OUT 1 (박스 1번 출력)", () => {
+    let show = createEmptyShow();
+    const rio = show.stageBoxes[0].id;
+    show = rowOps(busAccess("aux")).append(rowOps(busAccess("aux")).append(show));
+    show = updateBus(show, "aux", 1, { ports: [{ kind: "stagebox", stageBoxId: rio, port: 1 }] });
+    const plan = planDm7(show, load("basic"), { ...defaultDm7Options(show), items: onlyOut });
+    const expected = current(parseDm7File(new Uint8Array(readFileSync(join(DIR, "outpatch.dmxf")))));
+    const at = locate(section(parseSections(expected), "Processing"), ["Dante", ["OutputPort", 0], "Patch", "Source"]).pos;
+    expect([...plan.current.subarray(at, at + 4)]).toEqual([...expected.subarray(at, at + 4)]);
+    expect(plan.changes.map((c) => `${c.target} ${c.after}`)).toEqual(["Dante OUT 1 Mix 2"]);
+  });
+
+  it.skipIf(!existsSync(join(DIR, "outpatch3.dmxf")))("Mono/Sub(둘째 Main) → Stereo B → OMNI OUT 1: DM Editor 결과와 바이트까지 같다", () => {
+    let show = createEmptyShow();
+    show = updateBus(show, "main", 1, { ports: [{ kind: "local", port: 1 }] });
+    const plan = planDm7(show, load("basic"), { ...defaultDm7Options(show), items: onlyOut });
+    const expected = current(parseDm7File(new Uint8Array(readFileSync(join(DIR, "outpatch3.dmxf")))));
+    expect(Buffer.from(body(plan.current)).equals(Buffer.from(body(expected)))).toBe(true);
+    expect(plan.changes.map((c) => `${c.target} ${c.before} → ${c.after}`)).toEqual(["OMNI OUT 1 Mix 1 → Stereo B"]);
+  });
+
+  it("쓰지 않는 출력 비우기: 박스 범위와 OMNI OUT만", () => {
+    const show = createSampleShow();
+    const plan = planDm7(show, load("basic"), { ...defaultDm7Options(show), items: onlyOut, clearUnusedOutputs: true });
+    const cleared = plan.changes.filter((c) => c.after === "없음").map((c) => c.target);
+    expect(cleared).toContain("Dante OUT 14"); // Rio3224 출력 14번은 비어 있음
+    expect(cleared.some((t) => /Dante OUT (2[5-9]|[3-9]\d)/.test(t ?? ""))).toBe(false); // 박스 범위(1–24) 밖은 건드리지 않음
+  });
+});
+
+describe("DM7 버스 배정", () => {
+  it("Aux는 행 순서대로, 스테레오는 홀수에서 시작하는 Mix 두 개", () => {
+    const warnings: string[] = [];
+    const a = allocateBuses(createSampleShow(), (w) => warnings.push(w));
+    expect(a.map((x) => `${x.bus.name}=${x.label}`)).toEqual([
+      "Lead Vo Wedge=Mix 1", "Gtr Wedge=Mix 2", "Bass Wedge=Mix 3", "Keys Wedge=Mix 4",
+      "Drum IEM=Mix 5/6", "Lead Vo IEM=Mix 7/8", "Side Fill=Mix 9/10", "FX1 Rev=Mix 11/12", "FX2 Dly=Mix 13/14",
+      "Front Fill=Matrix 1", "Delay=Matrix 3/4", "Rec=Matrix 5/6", "Main LR=Stereo A",
+    ]);
+    expect(warnings.join()).toMatch(/Bus Setup/);
   });
 });
