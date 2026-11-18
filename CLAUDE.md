@@ -22,7 +22,8 @@
 
 [내 환경]
 
-- 주력 콘솔: Yamaha CL5 (1단계에서 기본값으로 가정, 확정 필요 시 수정)
+- 주력 콘솔: Yamaha DM7 Compact (콘솔 펌웨어 V2.1, DM Editor 2.x — 쇼 파일 `.dmxf`)
+  · 조사 결과: `docs/research/dm7.md`
 - 자주 쓰는 스테이지박스 구성: Rio3224(32in/16out) 1대 + Rio1608(16in/8out) 1대
 
 [개발 메모]
@@ -36,3 +37,4 @@
 - 오류 검사는 `checkShow`(src/model/schema.ts, 종류 코드 `ISSUE_LABEL`) + 보유 수량 `quantityIssues`(src/model/library.ts). 샘플 Show는 경고 0개를 유지한다(테스트로 확인). 패치 계산은 `src/model/patch.ts`.
 - 템플릿: 기본 블록·Show 틀과 삽입 계산은 `src/model/templates.ts`, 내 템플릿은 내 라이브러리(`blockTemplates`, `showTemplates`)에 저장.
 - 출력물: 내용은 `src/model/reports.ts`, 인쇄 화면은 `/shows/[id]/print`(`src/components/print`). 쪽 나누기는 행 높이를 재서 직접 한다(미리보기 = 인쇄). 엑셀은 `src/lib/xlsx.ts`(fflate로 직접 작성).
+- 콘솔 내보내기(DM7): `src/export/dm7/`. 쇼 파일 위치는 항상 파일 안 스키마로 계산(`mbdf.ts`)하고 코드에 박지 않는다. 검증 샘플은 `~/Documents/vender/dm7`(저장소 밖, 없으면 테스트 건너뜀).

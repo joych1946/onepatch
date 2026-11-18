@@ -163,6 +163,9 @@ export default function ShowView({ id }: { id: string }) {
         <button className={btn} onClick={doc.redo} disabled={!doc.canRedo} title="⇧⌘Z / Ctrl+Y">
           다시 실행
         </button>
+        <Link href={`/shows/${show.id}/console`} className={`${btn} self-center`} title="DM Editor 쇼 파일(.dmxf)에 인풋 설정 넣기">
+          콘솔 내보내기
+        </Link>
         <Link href={`/shows/${show.id}/print`} className={`${btn} self-center`} title="인풋·아웃풋 리스트, 패치 시트, 집계표, 라벨, 엑셀 (P)">
           출력·인쇄
         </Link>
