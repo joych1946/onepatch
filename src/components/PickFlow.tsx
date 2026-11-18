@@ -16,6 +16,7 @@ import {
   channelsOf,
   learnPick,
   micOptions,
+  nextSourceNumber,
   sourceLabel,
   suggestNextSources,
   type Library,
@@ -44,7 +45,25 @@ type Item = {
   swatch?: string;
   run: () => void;
 };
-type Section = { title: string; items: Item[]; compact?: boolean };
+/** header가 있으면 접고 펴는 악기군 (header도 키보드 목록의 한 항목) */
+type Section = { title: string; header?: Item; items: Item[]; compact?: boolean };
+
+const RECENT_KEY = "onepatch.picker.recentGroups";
+const OPEN_KEY = "onepatch.picker.openGroups";
+
+function readList(key: string): string[] | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) ?? "null");
+    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : null;
+  } catch {
+    return null;
+  }
+}
+function writeList(key: string, list: string[]) {
+  try {
+    localStorage.setItem(key, JSON.stringify(list));
+  } catch {}
+}
 
 interface Props {
   show: Show;
@@ -65,6 +84,10 @@ export default function PickFlow({ show, library, start, renumber, apply, update
   const [query, setQuery] = useState("");
   const [hi, setHi] = useState(0);
   const [prompt, setPrompt] = useState<Prompt>(null);
+  /** 마지막으로 쓴 악기군 (앞일수록 최근) */
+  const [recent, setRecent] = useState<string[]>(() => readList(RECENT_KEY) ?? []);
+  /** 펼쳐 둔 악기군. 저장된 적이 없으면 맨 위 악기군만 펼친다. */
+  const [open, setOpen] = useState<string[] | null>(() => readList(OPEN_KEY));
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const firstPromptBtn = useRef<HTMLButtonElement>(null);
@@ -96,7 +119,36 @@ export default function PickFlow({ show, library, start, renumber, apply, update
 
   /* ───────── 동작 ───────── */
 
+  const groupOrder = useMemo(() => {
+    const ids = new Set(library.groups.map((g) => g.id));
+    const first = recent.filter((id) => ids.has(id));
+    return [
+      ...first.map((id) => library.groups.find((g) => g.id === id)!),
+      ...library.groups.filter((g) => !first.includes(g.id)),
+    ];
+  }, [library.groups, recent]);
+  const openSet = new Set(open ?? groupOrder.slice(0, 1).map((g) => g.id));
+
+  const toggleGroup = (id: string) => {
+    const next = openSet.has(id) ? [...openSet].filter((x) => x !== id) : [...openSet, id];
+    setOpen(next);
+    writeList(OPEN_KEY, next);
+  };
+
+  /** 고른 소스의 악기군을 맨 위로, 펼친 상태로 */
+  const markGroupUsed = (groupId: string) => {
+    const r = [groupId, ...recent.filter((x) => x !== groupId)].slice(0, 20);
+    setRecent(r);
+    writeList(RECENT_KEY, r);
+    if (!openSet.has(groupId)) {
+      const o = [...openSet, groupId];
+      setOpen(o);
+      writeList(OPEN_KEY, o);
+    }
+  };
+
   const pickSource = (choice: SourceChoice, lib = library) => {
+    if (choice.kind === "library") markGroupUsed(choice.src.groupId);
     const r = applySourcePick(show, lib, row, choice, renumber);
     apply(() => r.show);
     const src = choice.kind === "library" ? choice.src : null;
@@ -147,7 +199,11 @@ export default function PickFlow({ show, library, start, renumber, apply, update
       const srcItem = (s: SourceDef, prefix = ""): Item => ({
         key: prefix + s.id,
         label: sourceLabel(s),
-        sub: s.stereo ? "2채널 · 링크" : undefined,
+        sub: s.stereo
+          ? "2채널 · 링크"
+          : s.numbered
+            ? `→ ${channelsOf(s, nextSourceNumber(library, show, s, row))[0].source}`
+            : undefined,
         swatch: s.color === "none" ? undefined : COLOR_SWATCH[s.color],
         run: () => pickSource({ kind: "library", src: s }),
       });
@@ -166,9 +222,24 @@ export default function PickFlow({ show, library, start, renumber, apply, update
         norm(s.name).includes(q) ||
         norm(s.shortName).includes(q) ||
         channelsOf(s).some((c) => norm(c.source).includes(q));
-      for (const g of library.groups) {
+      for (const g of groupOrder) {
         const items = library.sources.filter((s) => s.groupId === g.id && match(s)).map((s) => srcItem(s));
-        if (items.length) out.push({ title: g.name, items });
+        if (!items.length) continue;
+        if (q) {
+          out.push({ title: g.name, items }); // 검색 중에는 맞는 것을 모두 펼쳐서
+          continue;
+        }
+        const isOpen = openSet.has(g.id);
+        out.push({
+          title: g.name,
+          header: {
+            key: `grp-${g.id}`,
+            label: `${isOpen ? "▾" : "▸"} ${g.name}`,
+            sub: isOpen ? undefined : `${items.length}개`,
+            run: () => toggleGroup(g.id),
+          },
+          items: isOpen ? items : [],
+        });
       }
       const exact = library.sources.some(
         (s) => norm(s.name) === q || channelsOf(s).some((c) => norm(c.source) === q),
@@ -217,9 +288,9 @@ export default function PickFlow({ show, library, start, renumber, apply, update
     });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, q, query, library, show, row]);
+  }, [step, q, query, library, show, row, open, groupOrder]);
 
-  const flat = sections.flatMap((s) => s.items);
+  const flat = sections.flatMap((s) => (s.header ? [s.header, ...s.items] : s.items));
   const hiClamped = Math.min(hi, Math.max(0, flat.length - 1));
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -350,7 +421,25 @@ export default function PickFlow({ show, library, start, renumber, apply, update
             <div ref={listRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-3">
               {sections.map((sec, si) => (
                 <section key={si}>
-                  {sec.title && <h3 className="mb-1.5 text-xs font-medium text-neutral-500">{sec.title}</h3>}
+                  {sec.header ? (
+                    (() => {
+                      idx++;
+                      const isHi = idx === hiClamped;
+                      return (
+                        <button
+                          data-hi={isHi || undefined}
+                          aria-expanded={sec.items.length > 0}
+                          onClick={sec.header.run}
+                          className={`mb-1.5 flex min-h-9 w-full items-center gap-2 rounded px-1 text-left text-sm font-medium text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800 ${isHi ? "ring-2 ring-blue-600" : ""}`}
+                        >
+                          {sec.header.label}
+                          {sec.header.sub && <span className="text-xs font-normal text-neutral-400">{sec.header.sub}</span>}
+                        </button>
+                      );
+                    })()
+                  ) : (
+                    sec.title && <h3 className="mb-1.5 text-xs font-medium text-neutral-500">{sec.title}</h3>
+                  )}
                   <div className={`grid gap-2 ${sec.compact ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2 sm:grid-cols-3"}`}>
                     {sec.items.map((it) => {
                       idx++;

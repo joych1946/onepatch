@@ -45,12 +45,18 @@ export const SourceDefSchema = z.object({
   groupId: Id,
   color: ColorSchema,
   stereo: z.boolean(),
+  /** 늘 번호 붙이기: 고를 때마다 "가야금 1", "가야금 2"… (같은 악기가 여러 대인 경우) */
+  numbered: z.boolean().default(false),
   /** 추천 마이크 (앞일수록 우선) */
   micIds: z.array(Id),
+  /** 이 소스 다음에 먼저 제안할 소스 (없으면 목록 순서) */
+  next: z.array(Id).default([]),
 });
 
 export const LibrarySchema = z.object({
   schemaVersion: z.literal(LIBRARY_VERSION),
+  /** 어느 기본 목록 판까지 합쳐 넣었는지 (새 기본 항목을 기존 저장본에 한 번만 추가하려고) */
+  seedVersion: z.number().int().min(1).default(1),
   microphones: z.array(LibraryMicSchema),
   groups: z.array(SourceGroupSchema),
   /** 배열 순서 = 같은 악기군 안에서의 순서 */
@@ -71,32 +77,76 @@ export function orderedSources(lib: Library): SourceDef[] {
   return lib.groups.flatMap((g) => lib.sources.filter((s) => s.groupId === g.id));
 }
 
-/** 소스가 채널에 들어갈 이름 (스테레오면 L/R 두 개) */
-export function channelsOf(src: SourceDef): { source: string; shortName: string }[] {
-  if (!src.stereo) return [{ source: src.name, shortName: src.shortName }];
-  return (["L", "R"] as const).map((side) => ({
-    source: `${src.name} ${side}`,
-    shortName: `${src.shortName} ${side}`,
+export const SHORT_NAME_MAX = 8;
+
+/**
+ * 짧은 이름에 번호·L/R을 붙여도 SHORT_NAME_MAX자를 넘지 않게 맞춘다.
+ * "Gaya"+1 → "Gaya 1", "Haegeum"+1 → "Haegeum1", "JangGung"+1 → "JangGng1"(뒤쪽 모음부터 뺌)
+ */
+export function fitShortName(base: string, suffix: string): string {
+  if (!suffix) return base;
+  const spaced = `${base} ${suffix}`;
+  if (spaced.length <= SHORT_NAME_MAX) return spaced;
+  let b = base.replace(/\s+/g, "");
+  const room = SHORT_NAME_MAX - suffix.length;
+  while (b.length > room) {
+    // 첫 글자가 아닌 마지막 소문자 모음을 뺀다
+    const i = Math.max(...[...b.matchAll(/[aeiou]/g)].map((m) => m.index ?? 0).filter((i) => i > 0), -1);
+    if (i < 0) break;
+    b = b.slice(0, i) + b.slice(i + 1);
+  }
+  return b.slice(0, Math.max(0, room)) + suffix;
+}
+
+/** 소스가 채널에 들어갈 이름 (번호가 있으면 "가야금 2", 스테레오면 L/R 두 개) */
+export function channelsOf(src: SourceDef, num?: number): { source: string; shortName: string }[] {
+  const n = num ? ` ${num}` : "";
+  const sides = src.stereo ? (["L", "R"] as const) : ([""] as const);
+  return sides.map((side) => ({
+    source: `${src.name}${n}${side ? ` ${side}` : ""}`,
+    shortName: fitShortName(src.shortName, `${num ?? ""}${num && side ? " " : ""}${side}`),
   }));
 }
 
 export const sourceLabel = (src: SourceDef) => (src.stereo ? `${src.name} L/R` : src.name);
 
-/** 채널 소스명 → 라이브러리 소스 (side: 0 = 모노/L, 1 = R) */
-export function findSource(lib: Library, channelSource: string): { src: SourceDef; side: 0 | 1 } | null {
+export type SourceMatch = { src: SourceDef; side: 0 | 1; num?: number };
+
+/** 채널 소스명 → 라이브러리 소스 (side: 0 = 모노/L, 1 = R, num: 번호 붙이기 소스의 번호) */
+export function findSource(lib: Library, channelSource: string): SourceMatch | null {
   const n = norm(channelSource);
   if (!n) return null;
   for (const src of lib.sources) {
-    const chs = channelsOf(src);
-    const side = chs.findIndex((c) => norm(c.source) === n);
+    const side = channelsOf(src).findIndex((c) => norm(c.source) === n);
     if (side >= 0) return { src, side: side as 0 | 1 };
+  }
+  // 번호 붙이기 소스: "가야금 2", "Keys 2 L"
+  const m = channelSource.trim().match(/^(.*\S)\s+(\d+)(?:\s+([LR]))?$/i);
+  if (!m) return null;
+  const num = parseInt(m[2], 10);
+  for (const src of lib.sources) {
+    if (!src.numbered) continue;
+    const side = channelsOf(src, num).findIndex((c) => norm(c.source) === n);
+    if (side >= 0) return { src, side: side as 0 | 1, num };
   }
   return null;
 }
 
+/** 번호 붙이기 소스의 다음 번호 (exceptRow 행은 빼고 센다) */
+export function nextSourceNumber(lib: Library, show: Show, src: SourceDef, exceptRow = -1): number {
+  let max = 0;
+  show.inputs.forEach((c, i) => {
+    if (i === exceptRow) return;
+    const f = findSource(lib, c.source);
+    if (f?.src.id === src.id) max = Math.max(max, f.num ?? 1);
+  });
+  return max + 1;
+}
+
 /**
  * 직전 채널을 보고 다음에 올 소스 제안.
- * 라이브러리 순서에서 직전 소스 다음 것들 중 이 Show에서 아직 안 쓴 것.
+ * 직전 소스에 지정된 "다음 소스"를 먼저, 그 다음 라이브러리 순서에서 직전 소스 뒤의 것들.
+ * 이 Show에서 이미 쓴 소스는 빼되, 번호 붙이기 소스(여러 대)는 다시 나올 수 있다.
  */
 export function suggestNextSources(lib: Library, show: Show, index: number, limit = 3): SourceDef[] {
   const order = orderedSources(lib);
@@ -104,18 +154,25 @@ export function suggestNextSources(lib: Library, show: Show, index: number, limi
     show.inputs.flatMap((c, i) => {
       if (i === index) return [];
       const f = findSource(lib, c.source);
-      return f ? [f.src.id] : [];
+      return f && !f.src.numbered ? [f.src.id] : [];
     }),
   );
   let from = 0;
+  let explicit: SourceDef[] = [];
   for (let i = Math.min(index, show.inputs.length) - 1; i >= 0; i--) {
     const f = findSource(lib, show.inputs[i].source);
     if (f) {
       from = order.findIndex((s) => s.id === f.src.id) + 1;
+      explicit = f.src.next.flatMap((id) => order.filter((s) => s.id === id));
       break;
     }
   }
-  return order.slice(from).filter((s) => !used.has(s.id)).slice(0, limit);
+  const out: SourceDef[] = [];
+  for (const s of [...explicit, ...order.slice(from)]) {
+    if (out.length >= limit) break;
+    if (!used.has(s.id) && !out.includes(s)) out.push(s);
+  }
+  return out;
 }
 
 /** 사용자가 고른 마이크를 그 소스의 추천 목록에서 한 칸 올린다 (없으면 맨 뒤에 추가) */
@@ -142,7 +199,9 @@ export function addSource(lib: Library, name: string, groupId: string): { lib: L
     groupId: group ? group.id : lib.groups[0].id,
     color: sibling?.color ?? "none",
     stereo: false,
+    numbered: false,
     micIds: [],
+    next: [],
   };
   // 같은 악기군의 마지막 뒤에 넣는다
   const last = lib.sources.map((s) => s.groupId).lastIndexOf(src.groupId);

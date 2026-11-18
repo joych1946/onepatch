@@ -1,6 +1,6 @@
 /** 내 라이브러리 저장 — 레코드 하나("user"). 처음 열면 기본값을 넣는다. */
 import { LibrarySchema, type Library } from "@/model/library";
-import { createDefaultLibrary } from "@/model/libraryDefaults";
+import { createDefaultLibrary, upgradeLibrary } from "@/model/libraryDefaults";
 import { db, LIBRARY } from "./db";
 
 const KEY = "user";
@@ -13,7 +13,12 @@ export async function loadLibrary(): Promise<Library> {
     return lib;
   }
   const r = LibrarySchema.safeParse(raw);
-  if (r.success) return r.data;
+  if (r.success) {
+    // 새 기본 항목(예: 국악 악기군)을 기존 저장본에 합쳐 넣는다
+    const lib = upgradeLibrary(r.data);
+    if (lib !== r.data) await saveLibrary(lib);
+    return lib;
+  }
   // 형식이 맞지 않으면 원본을 따로 보관하고 기본값으로 다시 시작한다 (원본은 지우지 않음)
   console.warn("OnePatch: 저장된 라이브러리 형식이 맞지 않아 기본값으로 시작합니다. 원본은 백업해 둡니다.", r.error.issues);
   await (await db()).put(LIBRARY, raw, `${KEY}-backup-${Date.now()}`);

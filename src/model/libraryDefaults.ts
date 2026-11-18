@@ -82,8 +82,16 @@ const MICS: M[] = [
   ["mic-di100", "Behringer DI100", DI, null, ""],
 ];
 
-type G = [id: string, name: string, color: Color, sources: S[]];
-type S = [id: string, name: string, shortName: string, micIds: string[], stereo?: "stereo"];
+/** since: 이 항목이 기본 목록에 들어온 판. 기존 저장본에는 그보다 새 항목만 합쳐 넣는다. */
+type G = [id: string, name: string, color: Color, sources: S[], since?: number];
+type Opt = { stereo?: boolean; numbered?: boolean; next?: string[] };
+type S = [id: string, name: string, shortName: string, micIds: string[], opt?: Opt];
+
+/** 기본 목록의 판. 기본 항목을 추가하면 올린다. (2: 국악 악기군) */
+export const SEED_VERSION = 2;
+
+const ST: Opt = { stereo: true };
+const NUM: Opt = { numbered: true };
 
 const TOMS = ["mic-e604", "mic-e904", "mic-d2", "mic-beta98amp", "mic-md421"];
 const SMALL_COND = ["mic-sm81", "mic-km184", "mic-c451b", "mic-nt5"];
@@ -103,7 +111,7 @@ const GROUPS: G[] = [
     ["src-tom2", "Tom 2", "Tom2", TOMS],
     ["src-tom3", "Tom 3", "Tom3", TOMS],
     ["src-ftom", "Floor Tom", "FTom", ["mic-e904", "mic-d4", "mic-md421", "mic-e604"]],
-    ["src-oh", "OH", "OH", ["mic-c414", "mic-km184", "mic-sm81", "mic-c451b", "mic-nt5"], "stereo"],
+    ["src-oh", "OH", "OH", ["mic-c414", "mic-km184", "mic-sm81", "mic-c451b", "mic-nt5"], ST],
     ["src-ride", "Ride", "Ride", SMALL_COND],
   ]],
   ["grp-perc", "퍼커션", "orange", [
@@ -122,9 +130,9 @@ const GROUPS: G[] = [
     ["src-agtr-mic", "A.Gtr Mic", "AGtrMic", ["mic-km184", "mic-sm81", "mic-c451b", "mic-nt5"]],
   ]],
   ["grp-keys", "건반", "cyan", [
-    ["src-keys", "Keys", "Keys", LINE_DI, "stereo"],
-    ["src-synth", "Synth", "Synth", LINE_DI, "stereo"],
-    ["src-piano", "Piano", "Piano", ["mic-c414", "mic-km184", "mic-dpa4099"], "stereo"],
+    ["src-keys", "Keys", "Keys", LINE_DI, ST],
+    ["src-synth", "Synth", "Synth", LINE_DI, ST],
+    ["src-piano", "Piano", "Piano", ["mic-c414", "mic-km184", "mic-dpa4099"], ST],
   ]],
   ["grp-vox", "보컬", "blue", [
     ["src-lead-vox", "Lead Vox", "LeadVox", ["mic-beta58a", "mic-sm58", "mic-e935", "mic-ksm9", "mic-kms105"]],
@@ -145,18 +153,85 @@ const GROUPS: G[] = [
     ["src-cb", "Contrabass", "Cb", ["mic-dpa4099", "mic-j48", "mic-c414", "mic-re20"]],
   ]],
   ["grp-choir", "합창", "white", [
-    ["src-choir-oh", "Choir OH", "ChoOH", ["mic-km184", "mic-c414", "mic-sm81", "mic-nt5"], "stereo"],
+    ["src-choir-oh", "Choir OH", "ChoOH", ["mic-km184", "mic-c414", "mic-sm81", "mic-nt5"], ST],
   ]],
   ["grp-play", "재생·MC", "white", [
-    ["src-mr", "MR", "MR", LINE_DI, "stereo"],
+    ["src-mr", "MR", "MR", LINE_DI, ST],
     ["src-mc1", "MC 1", "MC1", ["mic-ulxd-b58", "mic-ulxd-sm58", "mic-qlxd-b58", "mic-ew500-935"]],
     ["src-mc2", "MC 2", "MC2", ["mic-ulxd-b58", "mic-ulxd-sm58", "mic-qlxd-b58", "mic-ew500-935"]],
     ["src-tb-mic", "Talkback", "TB", ["mic-sm58", "mic-beta58a", "mic-e835"]],
   ]],
 ];
 
+
+/*
+ * 국악: 마이킹 표준이 정해진 게 아니라 현장 관행이다. 아래는 기본값일 뿐이고 내 라이브러리에서 고쳐 쓴다.
+ * 추천에는 마이크 라이브러리에 이미 있는 모델만 넣는다.
+ */
+const GUGAK_STR = ["mic-dpa4099", "mic-km184", "mic-sm81", "mic-c451b"];
+const GUGAK_FLUTE = ["mic-km184", "mic-sm81", "mic-sm57", "mic-dpa4099"];
+const GUGAK_REED = ["mic-sm57", "mic-md421", "mic-re20"];
+const GUGAK_DRUM = ["mic-sm57", "mic-e604", "mic-e904", "mic-md421"];
+const GUGAK_BIG = ["mic-beta52a", "mic-d6", "mic-md421", "mic-sm57"];
+const GUGAK_METAL = ["mic-sm81", "mic-km184"];
+const GUGAK_VOX = ["mic-sm58", "mic-beta58a", "mic-ulxd-b58", "mic-kms105", "mic-beta87a"];
+
+const GUGAK: G[] = [
+  ["grp-gugak-str", "국악 현악", "brown", [
+    ["src-gayageum", "가야금", "Gaya", GUGAK_STR, NUM],
+    ["src-gayageum25", "25현 가야금", "25Gaya", [...GUGAK_STR, "mic-j48", "mic-ar133"]],
+    ["src-geomungo", "거문고", "Geomungo", GUGAK_STR],
+    ["src-daeajaeng", "대아쟁", "D.Ajaeng", GUGAK_STR],
+    ["src-soajaeng", "소아쟁", "S.Ajaeng", GUGAK_STR],
+    ["src-haegeum", "해금", "Haegeum", GUGAK_STR, NUM],
+    ["src-yanggeum", "양금", "Yanggeum", GUGAK_STR],
+  ], 2],
+  ["grp-gugak-wind", "국악 관악", "lime", [
+    ["src-daegeum", "대금", "Daegeum", GUGAK_FLUTE, NUM],
+    ["src-sogeum", "소금", "Sogeum", GUGAK_FLUTE],
+    ["src-danso", "단소", "Danso", GUGAK_FLUTE],
+    ["src-piri", "피리", "Piri", GUGAK_REED, NUM],
+    ["src-taepyeongso", "태평소", "Tpyeong", GUGAK_REED],
+    ["src-saenghwang", "생황", "Saenghwa", GUGAK_FLUTE],
+  ], 2],
+  ["grp-gugak-perc", "국악 타악", "pink", [
+    ["src-janggu-gung", "장구 궁편", "JangGung", GUGAK_DRUM, { numbered: true, next: ["src-janggu-chae"] }],
+    ["src-janggu-chae", "장구 채편", "JangChae", GUGAK_DRUM, NUM],
+    ["src-soribuk", "소리북", "SoriBuk", GUGAK_DRUM],
+    ["src-pungmulbuk", "풍물북", "PungBuk", GUGAK_DRUM],
+    ["src-kkwaenggwari", "꽹과리", "Kkwaeng", GUGAK_METAL],
+    ["src-jing", "징", "Jing", GUGAK_METAL],
+    ["src-daebuk", "대북", "Daebuk", GUGAK_BIG],
+    ["src-modeumbuk", "모듬북", "Modeum", GUGAK_BIG, NUM],
+  ], 2],
+  ["grp-gugak-vox", "국악 성악", "gray", [
+    ["src-sori", "소리", "Sori", GUGAK_VOX, { next: ["src-gosu", "src-soribuk"] }],
+    ["src-minyo", "민요", "Minyo", GUGAK_VOX, NUM],
+    ["src-jeongga", "정가", "Jeongga", GUGAK_VOX],
+    ["src-gosu", "고수 추임새", "Gosu", ["mic-sm58", "mic-sm57"]],
+  ], 2],
+];
+
+const ALL_GROUPS = [...GROUPS, ...GUGAK];
+
 /** 48V 필요 여부를 확인하지 못해 비워둔 기본 모델 */
 export const UNVERIFIED_MIC_IDS = MICS.filter((m) => m[3] === null).map((m) => m[0]);
+
+function toSources(list: G[]): SourceDef[] {
+  return list.flatMap(([groupId, , color, srcs]) =>
+    srcs.map(([id, name, shortName, micIds, opt = {}]) => ({
+      id,
+      name,
+      shortName,
+      groupId,
+      color,
+      stereo: !!opt.stereo,
+      numbered: !!opt.numbered,
+      micIds: [...micIds],
+      next: [...(opt.next ?? [])],
+    })),
+  );
+}
 
 export function createDefaultLibrary(): Library {
   const microphones: LibraryMic[] = MICS.map(([id, model, type, needsPhantom, defaultStand]) => ({
@@ -168,21 +243,33 @@ export function createDefaultLibrary(): Library {
     owned: null,
     builtin: true,
   }));
-  const sources: SourceDef[] = GROUPS.flatMap(([groupId, , color, list]) =>
-    list.map(([id, name, shortName, micIds, stereo]) => ({
-      id,
-      name,
-      shortName,
-      groupId,
-      color,
-      stereo: stereo === "stereo",
-      micIds: [...micIds],
-    })),
-  );
   return {
     schemaVersion: LIBRARY_VERSION,
+    seedVersion: SEED_VERSION,
     microphones,
-    groups: GROUPS.map(([id, name]) => ({ id, name })),
-    sources,
+    groups: ALL_GROUPS.map(([id, name]) => ({ id, name })),
+    sources: toSources(ALL_GROUPS),
+  };
+}
+
+/**
+ * 이미 저장된 내 라이브러리에 새 판의 기본 항목을 합쳐 넣는다.
+ * 저장본에 없는 악기군·소스만 추가하고, 기존 항목(내가 고친 소스, 보유 수량, 추천 순서)은 그대로 둔다.
+ * 예전에 내가 지운 기본 항목은 그 판 이전 것이므로 다시 생기지 않는다.
+ */
+export function upgradeLibrary(lib: Library): Library {
+  if (lib.seedVersion >= SEED_VERSION) return lib;
+  const newer = ALL_GROUPS.filter(([, , , , since = 1]) => since > lib.seedVersion);
+  const groupIds = new Set(lib.groups.map((g) => g.id));
+  const srcIds = new Set(lib.sources.map((s) => s.id));
+  const micIds = new Set(lib.microphones.map((m) => m.id));
+  const added = toSources(newer)
+    .filter((s) => !srcIds.has(s.id))
+    .map((s) => ({ ...s, micIds: s.micIds.filter((id) => micIds.has(id)) }));
+  return {
+    ...lib,
+    seedVersion: SEED_VERSION,
+    groups: [...lib.groups, ...newer.filter(([id]) => !groupIds.has(id)).map(([id, name]) => ({ id, name }))],
+    sources: [...lib.sources, ...added],
   };
 }

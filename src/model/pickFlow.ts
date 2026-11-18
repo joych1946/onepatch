@@ -11,6 +11,7 @@ import {
   channelsOf,
   ensureShowMic,
   findSource,
+  nextSourceNumber,
   type Library,
   type LibraryMic,
   type SourceDef,
@@ -26,7 +27,7 @@ const isBlank = (c: InputChannel) => c.source.trim() === "" && c.mic === null;
 function autoValues(lib: Library, ch: InputChannel) {
   const f = findSource(lib, ch.source);
   return {
-    shortName: f ? channelsOf(f.src)[f.side].shortName : ch.source,
+    shortName: f ? channelsOf(f.src, f.num)[f.side].shortName : ch.source,
     color: f?.src.color,
   };
 }
@@ -49,9 +50,15 @@ export function applySourcePick(
     s = appendChannel(s);
     index = s.inputs.length - 1;
   }
+  let num: number | undefined;
+  if (choice.kind === "library" && choice.src.numbered) {
+    // 같은 소스를 다시 고른 행이면 번호 유지, 아니면 이 Show에서 다음 번호
+    const cur = findSource(lib, s.inputs[index].source);
+    num = cur?.src.id === choice.src.id && cur.num ? cur.num : nextSourceNumber(lib, s, choice.src, index);
+  }
   const names =
     choice.kind === "library"
-      ? channelsOf(choice.src)
+      ? channelsOf(choice.src, num)
       : [{ source: choice.name.trim(), shortName: choice.name.trim() }];
   const color = choice.kind === "library" ? choice.src.color : null;
 

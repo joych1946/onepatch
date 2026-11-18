@@ -29,6 +29,11 @@ export const ColorSchema = z.enum([
   "blue",
   "purple",
   "white",
+  // 3단계 보완(국악 악기군)에서 추가. 콘솔에 없는 색은 내보내기 모듈이 가까운 색으로 바꾼다.
+  "pink",
+  "lime",
+  "brown",
+  "gray",
 ]);
 
 /**

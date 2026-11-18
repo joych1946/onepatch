@@ -429,6 +429,10 @@ function SourceRow({
           <input type="checkbox" checked={src.stereo} onChange={(e) => set({ stereo: e.target.checked })} />
           스테레오
         </label>
+        <label className="flex items-center gap-1" title="고를 때마다 번호를 붙임 (가야금 1, 가야금 2…)">
+          <input type="checkbox" checked={src.numbered} onChange={(e) => set({ numbered: e.target.checked })} />
+          늘 번호
+        </label>
         <select className={input} value={src.groupId} onChange={(e) => set({ groupId: e.target.value })} aria-label="악기군">
           {library.groups.map((g) => (
             <option key={g.id} value={g.id}>{g.name}</option>

@@ -72,7 +72,8 @@ export function parseColor(text: string): Color | undefined {
     빨간: "red", 적: "red", 주황색: "orange", 노란: "yellow", 황: "yellow",
     녹: "green", 초: "green", 청록: "cyan", 하늘색: "cyan", 파란: "blue", 청: "blue",
     보: "purple", 자주: "purple", 흰: "white", 백: "white",
-    magenta: "purple", pink: "purple", sky: "cyan", lightblue: "cyan",
+    magenta: "pink", 핑크: "pink", 연두색: "lime", lightgreen: "lime", 밤색: "brown", 갈: "brown",
+    grey: "gray", 회: "gray", 그레이: "gray", sky: "cyan", lightblue: "cyan",
   };
   return extra[t];
 }

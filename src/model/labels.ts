@@ -39,6 +39,10 @@ export const COLOR_LABEL: Record<Color, string> = {
   blue: "파랑",
   purple: "보라",
   white: "흰색",
+  pink: "분홍",
+  lime: "연두",
+  brown: "갈색",
+  gray: "회색",
 };
 
 /** 화면 표시용 색상 값 (콘솔 색상과는 무관) */
@@ -52,6 +56,10 @@ export const COLOR_SWATCH: Record<Color, string> = {
   blue: "#3b82f6",
   purple: "#a855f7",
   white: "#f5f5f5",
+  pink: "#f472b6",
+  lime: "#a3e635",
+  brown: "#a16207",
+  gray: "#9ca3af",
 };
 
 export function formatPort(port: PortRef | null, boxes: StageBox[]): string {

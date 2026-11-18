@@ -19,6 +19,9 @@ import { updateChannel } from "@/model/inputOps";
 import { COLUMNS, COL_INDEX } from "@/model/inputColumns";
 import { parseShow } from "@/model/serialize";
 import { loadLibrary, saveLibrary } from "@/storage/libraryStore";
+import { SEED_VERSION, upgradeLibrary } from "@/model/libraryDefaults";
+import { channelsOf, fitShortName, SHORT_NAME_MAX } from "@/model/library";
+import { db, LIBRARY } from "@/storage/db";
 
 const lib0 = createDefaultLibrary();
 const src = (lib: Library, name: string) => lib.sources.find((s) => s.name === name)!;
@@ -41,7 +44,8 @@ describe("기본 라이브러리", () => {
     expect(ids.size).toBe(lib0.microphones.length);
     expect(new Set(lib0.sources.map((s) => s.id)).size).toBe(lib0.sources.length);
     for (const s of lib0.sources) {
-      expect(s.micIds.length, s.name).toBeGreaterThanOrEqual(3);
+      // 국악 꽹과리·징·고수 추임새는 요청대로 2개, 나머지는 3개 이상
+      expect(s.micIds.length, s.name).toBeGreaterThanOrEqual(s.groupId.startsWith("grp-gugak") ? 2 : 3);
       for (const id of s.micIds) expect(ids.has(id), `${s.name} → ${id}`).toBe(true);
     }
     // 미확인 사양은 비워둔다
@@ -181,5 +185,107 @@ describe("보유 수량과 추천 순서", () => {
     expect(b.mic.needsPhantom).toBe(false);
     expect(addMic(a.lib, "Mystery Cond", "condenser").mic.needsPhantom).toBeNull();
     expect(LibrarySchema.safeParse(b.lib).success).toBe(true);
+  });
+});
+
+describe("국악 소스", () => {
+  const choose = (show: ReturnType<typeof createEmptyShow>, row: number, name: string) => pick(show, lib0, row, name);
+
+  it("짧은 이름은 번호·L/R이 붙어도 8자 이내, 한글·영문으로 찾을 수 있다", () => {
+    for (const s of lib0.sources) {
+      for (const n of [undefined, 1, 9])
+        for (const c of channelsOf(s, s.numbered ? n : undefined))
+          expect(c.shortName.length, `${c.source} → ${c.shortName}`).toBeLessThanOrEqual(SHORT_NAME_MAX);
+    }
+    expect(fitShortName("Haegeum", "1")).toBe("Haegeum1");
+    expect(fitShortName("JangGung", "2")).toBe("JangGng2");
+    expect(fitShortName("Gaya", "3")).toBe("Gaya 3");
+    // 국악 4군은 기존 악기군과 다른 색
+    const old = new Set(lib0.sources.filter((s) => !s.groupId.startsWith("grp-gugak")).map((s) => s.color));
+    const gugak = ["grp-gugak-str", "grp-gugak-wind", "grp-gugak-perc", "grp-gugak-vox"].map(
+      (g) => lib0.sources.find((s) => s.groupId === g)!.color,
+    );
+    expect(new Set(gugak).size).toBe(4);
+    for (const c of gugak) expect(old.has(c)).toBe(false);
+  });
+
+  it("해금: 추천 마이크가 있고, 짧은 이름 Haegeum(번호 포함)", () => {
+    const h = src(lib0, "해금");
+    expect(micOptions(lib0, createEmptyShow(), h).recommended[0].mic.model).toBe("DPA 4099");
+    const c = choose(createEmptyShow(), 0, "해금").show.inputs[0];
+    expect([c.source, c.shortName, c.color]).toEqual(["해금 1", "Haegeum1", "brown"]);
+  });
+
+  it("가야금을 세 번 고르면 가야금 1, 2, 3", () => {
+    let show = createEmptyShow();
+    for (let r = 0; r < 3; r++) show = choose(show, r, "가야금").show;
+    expect(show.inputs.map((c) => c.source)).toEqual(["가야금 1", "가야금 2", "가야금 3"]);
+    expect(show.inputs.map((c) => c.shortName)).toEqual(["Gaya 1", "Gaya 2", "Gaya 3"]);
+    // 같은 행에서 다시 골라도 번호 유지, 마이크만 바꿔도 그대로
+    show = choose(show, 1, "가야금").show;
+    expect(show.inputs[1].source).toBe("가야금 2");
+    // 번호 소스는 추천에 다시 나올 수 있다
+    expect(findSource(lib0, "가야금 2")?.num).toBe(2);
+  });
+
+  it("다음 소스: 장구 궁편 → 장구 채편, 소리 → 고수 추임새·소리북", () => {
+    let show = choose(createEmptyShow(), 0, "장구 궁편").show;
+    expect(show.inputs[0].source).toBe("장구 궁편 1");
+    expect(suggestNextSources(lib0, show, 1)[0].name).toBe("장구 채편");
+    show = choose(createEmptyShow(), 0, "소리").show;
+    expect(suggestNextSources(lib0, show, 1).slice(0, 2).map((s) => s.name)).toEqual(["고수 추임새", "소리북"]);
+  });
+
+  it("추천 마이크는 모두 라이브러리에 있는 모델", () => {
+    const ids = new Set(lib0.microphones.map((m) => m.id));
+    expect(lib0.microphones.length).toBe(57); // 새 마이크를 추측해서 추가하지 않음
+    for (const s of lib0.sources.filter((x) => x.groupId.startsWith("grp-gugak")))
+      for (const id of s.micIds) expect(ids.has(id), `${s.name} → ${id}`).toBe(true);
+  });
+});
+
+describe("기존 저장본에 새 기본 항목 합치기", () => {
+  /** 국악이 들어오기 전(판 1) 저장본을 흉내: 국악 없음, seedVersion·numbered·next 필드 없음 */
+  const oldStored = () => {
+    const lib = createDefaultLibrary();
+    const raw = JSON.parse(JSON.stringify(lib));
+    delete raw.seedVersion;
+    raw.groups = raw.groups.filter((g: { id: string }) => !g.id.startsWith("grp-gugak"));
+    raw.sources = raw.sources
+      .filter((s: { groupId: string }) => !s.groupId.startsWith("grp-gugak"))
+      .map((src: Record<string, unknown>) => {
+        delete src.numbered;
+        delete src.next;
+        return src;
+      });
+    // 사용자가 고친 내용
+    raw.microphones.find((m: { id: string }) => m.id === "mic-sm57").owned = 6;
+    raw.sources.find((s: { id: string }) => s.id === "src-kick-in").micIds = ["mic-d6", "mic-beta91a"];
+    raw.sources.find((s: { id: string }) => s.id === "src-snare-top").shortName = "SN";
+    raw.sources = raw.sources.filter((s: { id: string }) => s.id !== "src-ride"); // 지운 기본 소스
+    return raw;
+  };
+
+  it("없는 항목만 추가하고, 고친 내용과 지운 항목은 그대로", () => {
+    const parsed = LibrarySchema.parse(oldStored());
+    expect(parsed.seedVersion).toBe(1);
+    const up = upgradeLibrary(parsed);
+    expect(up.seedVersion).toBe(SEED_VERSION);
+    expect(up.groups.slice(-4).map((g) => g.name)).toEqual(["국악 현악", "국악 관악", "국악 타악", "국악 성악"]);
+    expect(findSource(up, "해금")?.src.shortName).toBe("Haegeum");
+    expect(up.microphones.find((m) => m.id === "mic-sm57")!.owned).toBe(6);
+    expect(src(up, "Kick In").micIds).toEqual(["mic-d6", "mic-beta91a"]);
+    expect(src(up, "Snare Top").shortName).toBe("SN");
+    expect(up.sources.some((s) => s.id === "src-ride")).toBe(false);
+    expect(upgradeLibrary(up)).toBe(up); // 두 번 해도 그대로
+  });
+
+  it("IndexedDB: 예전 저장본을 열면 합쳐서 다시 저장", async () => {
+    await (await db()).put(LIBRARY, oldStored(), "user");
+    const lib = await loadLibrary();
+    expect(findSource(lib, "가야금 1")?.src.name).toBe("가야금");
+    expect(lib.microphones.find((m) => m.id === "mic-sm57")!.owned).toBe(6);
+    const again: { seedVersion: number } = await (await db()).get(LIBRARY, "user");
+    expect(again.seedVersion).toBe(SEED_VERSION);
   });
 });
