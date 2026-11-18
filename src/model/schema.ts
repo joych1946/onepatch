@@ -138,6 +138,7 @@ export const BusPurposeSchema = z.enum([
   "delay",
   "record",
   "broadcast",
+  "lobby",
   "other",
 ]);
 
@@ -153,6 +154,8 @@ export const OutputBusSchema = z.object({
   tap: z.enum(["pre", "post"]),
   /** 물리 출력. 스테레오면 보통 [L, R] 2개, FX처럼 내부 버스면 빈 배열. */
   ports: z.array(PortRefSchema),
+  /** Matrix 전용: 이 Matrix가 받는 버스들 (예: Main L/R, Aux 5). 다른 종류에서는 빈 배열. */
+  sources: z.array(Id).default([]),
   notes: z.string(),
 });
 
@@ -261,8 +264,14 @@ export function checkShow(show: z.infer<typeof ShowObjectSchema>): {
     });
   });
 
+  const busIds = new Set(show.outputs.map((o) => o.id));
   show.outputs.forEach((bus, i) => {
     bus.ports.forEach((p, j) => checkPort(p, "outputs", ["outputs", i, "ports", j]));
+    bus.sources.forEach((id, j) => {
+      if (!busIds.has(id)) err(["outputs", i, "sources", j], `없는 버스: ${id}`);
+    });
+    if (bus.width === "stereo" && bus.ports.length === 1)
+      warn(["outputs", i, "ports"], `${bus.name || "버스"}: 스테레오인데 출력 포트가 1개`);
   });
 
   return { errors, warnings };

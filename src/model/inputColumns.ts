@@ -120,18 +120,23 @@ export function parsePort(show: Show, index: number, text: string): PortRef | nu
       } else if (/^(l|local|lo|로컬|콘솔)$/.test(prefix)) {
         return { kind: "local", port };
       } else {
-        const boxes = show.stageBoxes;
-        const box =
-          boxes.find((b) => norm(b.name) === prefix) ??
-          boxes.find((b) => norm(b.name).startsWith(prefix)) ??
-          (boxes.filter((b) => norm(b.name).includes(prefix)).length === 1
-            ? boxes.find((b) => norm(b.name).includes(prefix))
-            : undefined);
+        const box = matchStageBox(show, prefix);
         if (box) return { kind: "stagebox", stageBoxId: box.id, port };
       }
     }
   }
   return { kind: "other", label: t };
+}
+
+/** 정규화된 이름 앞부분으로 스테이지박스 찾기: 정확히 → 앞부분 → 유일하게 포함 */
+export function matchStageBox(show: Show, prefix: string) {
+  const boxes = show.stageBoxes;
+  const inc = boxes.filter((b) => norm(b.name).includes(prefix));
+  return (
+    boxes.find((b) => norm(b.name) === prefix) ??
+    boxes.find((b) => norm(b.name).startsWith(prefix)) ??
+    (inc.length === 1 ? inc[0] : undefined)
+  );
 }
 
 /** "1, 5" / "DCA 3" / "Drums" → DCA id 목록. 없는 번호·이름은 새 DCA를 만든다. */

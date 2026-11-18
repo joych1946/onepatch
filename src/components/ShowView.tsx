@@ -1,21 +1,24 @@
 "use client";
 
-/** Show 화면: 인풋리스트 편집 그리드 + (아직 편집 화면이 없는 항목은) 읽기 전용 보기 */
+/** Show 화면: 탭(인풋 / 아웃풋 / DCA·뮤트) + 아직 편집 화면이 없는 항목은 읽기 전용 보기 */
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Show } from "@/model/schema";
 import { showFileName, showToJson } from "@/model/serialize";
-import { BUS_KIND_LABEL, BUS_PURPOSE_LABEL, MIC_TYPE_LABEL, formatPort } from "@/model/labels";
+import { MIC_TYPE_LABEL } from "@/model/labels";
 import { downloadText, isTypingTarget } from "@/lib/download";
 import InputGrid from "./InputGrid";
+import OutputsView from "./OutputsView";
+import GroupsView from "./GroupsView";
 import { useShowDoc, type SaveStatus } from "./useShowDoc";
 import { useLibrary } from "./useLibrary";
 import { quantityIssues } from "@/model/library";
 
-const th = "py-1.5 pr-3 text-left font-medium text-neutral-500 whitespace-nowrap";
-const td = "py-1 pr-3 align-top";
 const RENUMBER_KEY = "onepatch.renumber";
+const TAB_KEY = "onepatch.showTab";
+type Tab = "inputs" | "outputs" | "groups";
+const TABS: Tab[] = ["inputs", "outputs", "groups"];
 
 type Message = { text: string; details?: string[] };
 
@@ -26,14 +29,26 @@ export default function ShowView({ id }: { id: string }) {
   const { show } = doc;
   const [message, setMessage] = useState<Message | null>(null);
   const [renumber, setRenumber] = useState(true);
+  const [tab, setTabState] = useState<Tab>("inputs");
 
   useEffect(() => {
     try {
       const v = localStorage.getItem(RENUMBER_KEY);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      const t = localStorage.getItem(TAB_KEY) as Tab | null;
+      /* eslint-disable react-hooks/set-state-in-effect */
       if (v !== null) setRenumber(v === "1");
+      if (t && TABS.includes(t)) setTabState(t);
+      /* eslint-enable react-hooks/set-state-in-effect */
     } catch {}
   }, []);
+
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    setMessage(null);
+    try {
+      localStorage.setItem(TAB_KEY, t);
+    } catch {}
+  };
 
   const toggleRenumber = (v: boolean) => {
     setRenumber(v);
@@ -43,6 +58,18 @@ export default function ShowView({ id }: { id: string }) {
   };
 
   const exportJson = () => show && downloadText(showFileName(show), showToJson(show));
+
+  // ⌥/Alt+1·2·3: 탭 전환 (그리드 안에서도)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const m = e.code.match(/^Digit([1-3])$/);
+      if (!m || !e.altKey || e.metaKey || e.ctrlKey) return;
+      e.preventDefault();
+      setTab(TABS[Number(m[1]) - 1]);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -68,8 +95,12 @@ export default function ShowView({ id }: { id: string }) {
   // 보유 수량 초과는 내 라이브러리와 비교해야 알 수 있으므로 여기서 더한다
   const warnings = [...doc.warnings, ...(lib.library ? quantityIssues(lib.library, show) : [])];
   const allIssues = [...doc.errors, ...warnings];
-  const otherIssues = allIssues.filter((i) => i.path[0] !== "inputs");
-  const inputIssues = allIssues.filter((i) => i.path[0] === "inputs");
+  const area = (i: { path: PropertyKey[] }): Tab | null =>
+    i.path[0] === "inputs" ? "inputs" : i.path[0] === "outputs" ? "outputs" : i.path[0] === "dcas" || i.path[0] === "muteGroups" ? "groups" : null;
+  const otherIssues = allIssues.filter((i) => area(i) === null);
+  const tabIssues = allIssues.filter((i) => area(i) === tab);
+  const issueCount = (t: Tab) => allIssues.filter((i) => area(i) === t).length;
+  const onMessage = (text: string, details?: string[]) => setMessage({ text, details });
   const btn =
     "rounded border border-neutral-300 dark:border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-40";
 
@@ -102,36 +133,66 @@ export default function ShowView({ id }: { id: string }) {
         </button>
       </header>
 
-      <section className="mb-8">
-        <div className="mb-2 flex flex-wrap items-center gap-4">
-          <h2 className="text-base font-semibold">인풋 ({show.inputs.length}ch)</h2>
-          <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
-            <input type="checkbox" checked={renumber} onChange={(e) => toggleRenumber(e.target.checked)} />
-            행 추가·삭제·이동 시 채널 번호를 순서대로 다시 매기기
-          </label>
-        </div>
+      <div role="tablist" className="mb-3 flex flex-wrap items-center gap-1 border-b border-neutral-200 dark:border-neutral-800">
+        {TABS.map((t, i) => {
+          const label =
+            t === "inputs"
+              ? `인풋 (${show.inputs.length}ch)`
+              : t === "outputs"
+                ? `아웃풋 (${show.outputs.length})`
+                : `DCA·뮤트 (${show.dcas.length}/${show.muteGroups.length})`;
+          const n = issueCount(t);
+          return (
+            <button
+              key={t}
+              role="tab"
+              aria-selected={tab === t}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setTab(t)}
+              title={`⌥/Alt+${i + 1}`}
+              className={`-mb-px border-b-2 px-3 py-2 ${tab === t ? "border-blue-600 font-semibold" : "border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"}`}
+            >
+              {label}
+              {n > 0 && <span className="ml-1.5 rounded bg-red-100 px-1 text-[11px] text-red-700 dark:bg-red-950 dark:text-red-300">{n}</span>}
+            </button>
+          );
+        })}
+        <label className="ml-auto flex items-center gap-1.5 py-2 text-xs text-neutral-600 dark:text-neutral-400">
+          <input type="checkbox" checked={renumber} onChange={(e) => toggleRenumber(e.target.checked)} />
+          행 추가·삭제·이동 시 번호를 순서대로 다시 매기기
+        </label>
+      </div>
 
-        <InputGrid
-          show={show}
-          apply={doc.apply}
-          undo={doc.undo}
-          redo={doc.redo}
-          issues={allIssues}
-          renumber={renumber}
-          onMessage={(text, details) => setMessage({ text, details })}
-          library={lib.library}
-          updateLibrary={lib.update}
-        />
+      <section className="mb-8">
+        {tab === "inputs" && (
+          <InputGrid
+            show={show}
+            apply={doc.apply}
+            undo={doc.undo}
+            redo={doc.redo}
+            issues={allIssues}
+            renumber={renumber}
+            onMessage={onMessage}
+            library={lib.library}
+            updateLibrary={lib.update}
+          />
+        )}
+        {tab === "outputs" && (
+          <OutputsView show={show} apply={doc.apply} undo={doc.undo} redo={doc.redo} renumber={renumber} issues={allIssues} onMessage={onMessage} />
+        )}
+        {tab === "groups" && (
+          <GroupsView show={show} apply={doc.apply} undo={doc.undo} redo={doc.redo} renumber={renumber} issues={allIssues} onMessage={onMessage} />
+        )}
         {lib.error && <p className="mt-2 text-xs text-red-600 whitespace-pre-wrap">내 라이브러리: {lib.error}</p>}
 
-        {(message || inputIssues.length > 0) && (
+        {(message || tabIssues.length > 0) && (
           <div className="mt-2 space-y-2 text-xs">
-            {inputIssues.length > 0 && (
+            {tabIssues.length > 0 && (
               <div className="rounded border border-red-400 bg-red-50 px-3 py-2 text-red-800 dark:bg-red-950 dark:text-red-200">
-                확인할 항목 {inputIssues.length}건 — 빨간 셀에 마우스를 올리면 이유가 보입니다
+                확인할 항목 {tabIssues.length}건 — 빨간 셀에 마우스를 올리면 이유가 보입니다
                 {doc.errors.length > 0 ? " (고치기 전에는 저장되지 않음)" : " (저장은 됨)"}
                 <ul className="mt-1 list-disc pl-5">
-                  {inputIssues.slice(0, 5).map((i, k) => (
+                  {tabIssues.slice(0, 5).map((i, k) => (
                     <li key={k}>{i.message}</li>
                   ))}
                 </ul>
@@ -163,7 +224,10 @@ export default function ShowView({ id }: { id: string }) {
         <details className="mt-3 text-xs text-neutral-500">
           <summary className="cursor-pointer">키보드 단축키</summary>
           <ul className="mt-2 grid gap-x-8 gap-y-1 sm:grid-cols-2">
-            <li><b>Ch 칸 클릭</b> 또는 Ch 열에서 <kbd>Space</kbd> → 소스·마이크를 눌러서 입력 (<kbd>↑↓</kbd> <kbd>Enter</kbd>, 글자로 검색)</li>
+            <li><kbd>⌥/Alt</kbd>+<kbd>1</kbd>·<kbd>2</kbd>·<kbd>3</kbd> 인풋·아웃풋·DCA·뮤트 탭 전환</li>
+            <li><b>Ch·버스 번호 칸 클릭</b> 또는 그 열에서 <kbd>Space</kbd> → 눌러서 입력 (<kbd>↑↓</kbd> <kbd>Enter</kbd>, 글자로 검색)</li>
+            <li>아웃풋·DCA 표: 맨 아래 행에서 <kbd>↓</kbd>, 맨 윗행에서 <kbd>↑</kbd>로 이웃 표로 이동 · DCA 멤버 칸에 “1-4, 7”</li>
+            <li>M/S·Pre/Post 열: <kbd>Space</kbd>로 바꾸기, <kbd>S</kbd>/<kbd>M</kbd>, <kbd>P</kbd> 입력도 됨</li>
             <li><kbd>←↑↓→</kbd> <kbd>Tab</kbd> 이동 · <kbd>Shift</kbd>+방향키 범위 선택 · <kbd>Shift</kbd>+<kbd>Space</kbd> 행 선택</li>
             <li>글자 입력 → 바로 덮어쓰기 · <kbd>Enter</kbd>/<kbd>F2</kbd> 기존 값 편집 · <kbd>Esc</kbd> 취소</li>
             <li>편집 후 <kbd>Enter</kbd> 아래로(Tab으로 시작한 열로 복귀) · 마지막 빈 행에 입력하면 채널 추가</li>
@@ -201,36 +265,7 @@ function SaveBadge({ status, warnings }: { status: SaveStatus; warnings: number 
 function ReadonlySections({ show }: { show: Show }) {
   return (
     <>
-      <Section title={`아웃풋 (${show.outputs.length})`}>
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="border-b border-neutral-300 dark:border-neutral-700">
-              {["버스", "이름", "용도", "M/S", "Pre/Post", "물리 출력", "비고"].map((h) => (
-                <th key={h} className={th}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {show.outputs.map((b) => (
-              <tr key={b.id} className="border-b border-neutral-200 dark:border-neutral-800">
-                <td className={`${td} whitespace-nowrap`}>
-                  {BUS_KIND_LABEL[b.kind]} {b.number}
-                </td>
-                <td className={td}>{b.name}</td>
-                <td className={td}>{BUS_PURPOSE_LABEL[b.purpose]}</td>
-                <td className={td}>{b.width === "stereo" ? "Stereo" : "Mono"}</td>
-                <td className={td}>{b.kind === "main" ? "" : b.tap === "pre" ? "Pre" : "Post"}</td>
-                <td className={td}>
-                  {b.ports.length ? b.ports.map((p) => formatPort(p, show.stageBoxes)).join(" / ") : "—"}
-                </td>
-                <td className={td}>{b.notes}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Section>
-
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-2">
         <Section title="스테이지박스">
           <ul className="space-y-1">
             {show.stageBoxes.map((b) => (
@@ -238,16 +273,6 @@ function ReadonlySections({ show }: { show: Show }) {
                 <b>{b.name}</b> {b.inputs}in/{b.outputs}out
                 <span className="text-neutral-500"> · {b.location}</span>
               </li>
-            ))}
-          </ul>
-        </Section>
-        <Section title="DCA / 뮤트 그룹">
-          <ul className="space-y-1">
-            {show.dcas.map((d) => (
-              <li key={d.id}>DCA {d.number} — {d.name}</li>
-            ))}
-            {show.muteGroups.map((g) => (
-              <li key={g.id}>Mute {g.number} — {g.name}</li>
             ))}
           </ul>
         </Section>

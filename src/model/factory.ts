@@ -31,7 +31,11 @@ export function createEmptyShow(title = "새 공연"): Show {
     dcas: [],
     muteGroups: [],
     inputs: [],
-    outputs: [],
+    // 콘솔마다 있는 메인 출력 (패치만 채우면 된다)
+    outputs: [
+      { id: newId(), kind: "main", number: 1, name: "Main L/R", purpose: "pa", width: "stereo", tap: "post", ports: [], sources: [], notes: "" },
+      { id: newId(), kind: "main", number: 2, name: "Mono/Sub", purpose: "sub", width: "mono", tap: "post", ports: [], sources: [], notes: "" },
+    ],
   };
 }
 

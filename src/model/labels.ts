@@ -26,6 +26,7 @@ export const BUS_PURPOSE_LABEL: Record<BusPurpose, string> = {
   delay: "딜레이",
   record: "녹음",
   broadcast: "중계",
+  lobby: "로비",
   other: "기타",
 };
 

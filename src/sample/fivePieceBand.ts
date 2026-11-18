@@ -126,6 +126,7 @@ const bus = (
   width,
   tap,
   ports,
+  sources: kind === "matrix" ? ["bus-main-1"] : [],
   notes,
 });
 
