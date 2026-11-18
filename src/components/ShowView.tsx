@@ -10,6 +10,8 @@ import { BUS_KIND_LABEL, BUS_PURPOSE_LABEL, MIC_TYPE_LABEL, formatPort } from "@
 import { downloadText, isTypingTarget } from "@/lib/download";
 import InputGrid from "./InputGrid";
 import { useShowDoc, type SaveStatus } from "./useShowDoc";
+import { useLibrary } from "./useLibrary";
+import { quantityIssues } from "@/model/library";
 
 const th = "py-1.5 pr-3 text-left font-medium text-neutral-500 whitespace-nowrap";
 const td = "py-1 pr-3 align-top";
@@ -20,6 +22,7 @@ type Message = { text: string; details?: string[] };
 export default function ShowView({ id }: { id: string }) {
   const router = useRouter();
   const doc = useShowDoc(id);
+  const lib = useLibrary();
   const { show } = doc;
   const [message, setMessage] = useState<Message | null>(null);
   const [renumber, setRenumber] = useState(true);
@@ -43,7 +46,7 @@ export default function ShowView({ id }: { id: string }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.defaultPrevented || isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "Escape") router.push("/");
       else if (e.key === "e") exportJson();
       else return;
@@ -62,7 +65,9 @@ export default function ShowView({ id }: { id: string }) {
     );
   if (!show) return <main className="p-6 text-neutral-500">불러오는 중…</main>;
 
-  const allIssues = [...doc.errors, ...doc.warnings];
+  // 보유 수량 초과는 내 라이브러리와 비교해야 알 수 있으므로 여기서 더한다
+  const warnings = [...doc.warnings, ...(lib.library ? quantityIssues(lib.library, show) : [])];
+  const allIssues = [...doc.errors, ...warnings];
   const otherIssues = allIssues.filter((i) => i.path[0] !== "inputs");
   const inputIssues = allIssues.filter((i) => i.path[0] === "inputs");
   const btn =
@@ -82,7 +87,10 @@ export default function ShowView({ id }: { id: string }) {
               .join(" · ")}
           </p>
         </div>
-        <SaveBadge status={doc.status} warnings={doc.warnings.length} />
+        <Link href="/library" className={`${btn} self-center`}>
+          내 장비·소스
+        </Link>
+        <SaveBadge status={doc.status} warnings={warnings.length} />
         <button className={btn} onClick={doc.undo} disabled={!doc.canUndo} title="⌘Z / Ctrl+Z">
           실행 취소
         </button>
@@ -111,7 +119,10 @@ export default function ShowView({ id }: { id: string }) {
           issues={allIssues}
           renumber={renumber}
           onMessage={(text, details) => setMessage({ text, details })}
+          library={lib.library}
+          updateLibrary={lib.update}
         />
+        {lib.error && <p className="mt-2 text-xs text-red-600 whitespace-pre-wrap">내 라이브러리: {lib.error}</p>}
 
         {(message || inputIssues.length > 0) && (
           <div className="mt-2 space-y-2 text-xs">
@@ -152,6 +163,7 @@ export default function ShowView({ id }: { id: string }) {
         <details className="mt-3 text-xs text-neutral-500">
           <summary className="cursor-pointer">키보드 단축키</summary>
           <ul className="mt-2 grid gap-x-8 gap-y-1 sm:grid-cols-2">
+            <li><b>Ch 칸 클릭</b> 또는 Ch 열에서 <kbd>Space</kbd> → 소스·마이크를 눌러서 입력 (<kbd>↑↓</kbd> <kbd>Enter</kbd>, 글자로 검색)</li>
             <li><kbd>←↑↓→</kbd> <kbd>Tab</kbd> 이동 · <kbd>Shift</kbd>+방향키 범위 선택 · <kbd>Shift</kbd>+<kbd>Space</kbd> 행 선택</li>
             <li>글자 입력 → 바로 덮어쓰기 · <kbd>Enter</kbd>/<kbd>F2</kbd> 기존 값 편집 · <kbd>Esc</kbd> 취소</li>
             <li>편집 후 <kbd>Enter</kbd> 아래로(Tab으로 시작한 열로 복귀) · 마지막 빈 행에 입력하면 채널 추가</li>
@@ -239,14 +251,14 @@ function ReadonlySections({ show }: { show: Show }) {
             ))}
           </ul>
         </Section>
-        <Section title={`마이크 라이브러리 (${show.microphones.length})`}>
+        <Section title={`이 Show의 마이크 (${show.microphones.length})`}>
           <ul className="space-y-1">
             {show.microphones.map((m) => (
               <li key={m.id}>
                 {m.model}
                 <span className="text-neutral-500">
                   {" "}· {MIC_TYPE_LABEL[m.type]}
-                  {m.needsPhantom && " · 48V"}
+                  {m.needsPhantom === null ? " · 48V 미확인" : m.needsPhantom && " · 48V"}
                   {m.defaultStand && ` · ${m.defaultStand}`}
                 </span>
               </li>

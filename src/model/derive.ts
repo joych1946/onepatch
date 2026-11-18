@@ -25,3 +25,10 @@ export function resolveStand(show: Show, ch: InputChannel): string {
   const id = ch.mic.microphoneId;
   return show.microphones.find((m) => m.id === id)?.defaultStand ?? "";
 }
+
+/** 48V를 마이크 기본값에 맡겼는데 그 마이크의 48V 사양이 미확인인 경우 */
+export function phantomUnknown(show: Show, ch: InputChannel): boolean {
+  if (ch.phantom !== null || ch.mic?.kind !== "library") return false;
+  const id = ch.mic.microphoneId;
+  return show.microphones.find((m) => m.id === id)?.needsPhantom === null;
+}

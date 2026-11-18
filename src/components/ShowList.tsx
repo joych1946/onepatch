@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createEmptyShow, duplicateShow, newId } from "@/model/factory";
@@ -142,6 +143,9 @@ export default function ShowList() {
     <main className="mx-auto w-full max-w-5xl p-6">
       <header className="mb-6 flex flex-wrap items-center gap-2">
         <h1 className="mr-auto text-2xl font-bold">OnePatch</h1>
+        <Link href="/library" className={btn}>
+          내 장비·소스
+        </Link>
         <button className={btn} onClick={() => run(actions.create())}>
           새 Show <kbd>N</kbd>
         </button>

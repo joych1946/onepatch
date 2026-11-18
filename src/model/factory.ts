@@ -1,4 +1,4 @@
-import { SCHEMA_VERSION, type Microphone, type Show, type StageBox } from "./schema";
+import { SCHEMA_VERSION, type Show, type StageBox } from "./schema";
 
 export function newId(): string {
   return crypto.randomUUID();
@@ -9,30 +9,6 @@ export function defaultStageBoxes(): StageBox[] {
   return [
     { id: newId(), name: "Rio3224", inputs: 32, outputs: 16, location: "무대 하수(SL)" },
     { id: newId(), name: "Rio1608", inputs: 16, outputs: 8, location: "무대 상수(SR)" },
-  ];
-}
-
-/** 새 Show에 미리 넣어두는 기본 마이크 라이브러리 */
-export function starterMicrophones(): Microphone[] {
-  const m = (
-    model: string,
-    type: Microphone["type"],
-    needsPhantom: boolean,
-    defaultStand: string,
-  ): Microphone => ({ id: newId(), model, type, needsPhantom, defaultStand });
-  return [
-    m("Shure SM58", "dynamic", false, "톨붐"),
-    m("Shure SM57", "dynamic", false, "숏붐"),
-    m("Shure Beta 52A", "dynamic", false, "숏붐"),
-    m("Shure Beta 91A", "condenser", true, ""),
-    m("Shure SM81", "condenser", true, "숏붐"),
-    m("Sennheiser e604", "dynamic", false, "클램프"),
-    m("Sennheiser e906", "dynamic", false, ""),
-    m("Sennheiser MD421", "dynamic", false, "숏붐"),
-    m("Neumann KM184", "condenser", true, "톨붐"),
-    m("Radial J48", "di", true, ""),
-    m("Radial ProD2", "di", false, ""),
-    m("Shure ULXD2/B58", "wireless", false, ""),
   ];
 }
 
@@ -50,7 +26,8 @@ export function createEmptyShow(title = "새 공연"): Show {
     createdAt: now,
     updatedAt: now,
     stageBoxes: defaultStageBoxes(),
-    microphones: starterMicrophones(),
+    // 마이크는 내 라이브러리에서 고를 때 Show 안으로 복사된다 (Show JSON 하나로 완결)
+    microphones: [],
     dcas: [],
     muteGroups: [],
     inputs: [],

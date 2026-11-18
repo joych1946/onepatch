@@ -8,6 +8,14 @@ import { newId } from "./factory";
 import { updateChannel } from "./inputOps";
 import { COLOR_LABEL, formatPort } from "./labels";
 import type { Color, InputChannel, MicRef, PortRef, Show } from "./schema";
+import { ensureShowMic, findMicByName, type LibraryMic } from "./library";
+import { norm } from "./text";
+
+/** 열 변환에 필요한 Show 밖의 정보 */
+export interface ColCtx {
+  /** 내 라이브러리의 마이크 (Show에 아직 없는 모델도 이름으로 고를 수 있게) */
+  catalog?: LibraryMic[];
+}
 
 export type ColKey =
   | "ch"
@@ -34,14 +42,13 @@ export interface Column {
   /** Enter로 편집을 시작할 때의 초기 텍스트 */
   editText(show: Show, ch: InputChannel): string;
   /** 텍스트를 적용. 인식할 수 없는 값이면 null */
-  set(show: Show, index: number, text: string): Show | null;
+  set(show: Show, index: number, text: string, ctx?: ColCtx): Show | null;
   /** 편집 중 보여줄 후보 */
-  suggestions?(show: Show): string[];
+  suggestions?(show: Show, ctx?: ColCtx): string[];
 }
 
 /* ───────────── 파서 ───────────── */
 
-const norm = (s: string) => s.toLowerCase().replace(/[\s._\-/()#:+]/g, "");
 
 const TRUE_RE = /^(y|yes|o|○|◯|●|v|✓|✔|1|true|on|48|48v|phantom|link|linked|st|stereo|↔.*|예|있음|켜기)$/;
 const FALSE_RE = /^(n|no|x|×|-|—|0|false|off|아니오|없음|끄기)$/;
@@ -70,19 +77,15 @@ export function parseColor(text: string): Color | undefined {
   return extra[t];
 }
 
-export function parseMic(show: Show, text: string): MicRef | null {
+/**
+ * 마이크 텍스트 → 참조. Show 안의 마이크를 먼저, 없으면 내 라이브러리(catalog)에서 찾는다.
+ * 어디에도 없으면 자유 입력(custom).
+ */
+export function parseMic(show: Show, text: string, catalog: LibraryMic[] = []): MicRef | null {
   const t = text.trim();
   if (t === "" || t === "-") return null;
-  const n = norm(t);
-  const lib = show.microphones;
-  const exact = lib.find((m) => norm(m.model) === n);
-  if (exact) return { kind: "library", microphoneId: exact.id };
-  if (n.length >= 3) {
-    // "SM58" → "Shure SM58" 처럼 제조사를 뺀 이름도 인식 (하나만 맞을 때)
-    const tail = lib.filter((m) => norm(m.model).endsWith(n));
-    if (tail.length === 1) return { kind: "library", microphoneId: tail[0].id };
-  }
-  return { kind: "custom", name: t };
+  const m = findMicByName(show.microphones, t) ?? findMicByName(catalog, t);
+  return m ? { kind: "library", microphoneId: m.id } : { kind: "custom", name: t };
 }
 
 /** "" → null(기본값), "없음" → "" (스탠드 없음) */
@@ -198,8 +201,18 @@ export const COLUMNS: Column[] = [
     aliases: ["mic", "micdi", "mics", "microphone", "model", "di", "마이크", "마이크di", "기종"],
     text: (s, ch) => micName(s, ch),
     editText: (s, ch) => micName(s, ch),
-    set: (show, i, text) => updateChannel(show, i, { mic: parseMic(show, text) }),
-    suggestions: (s) => s.microphones.map((m) => m.model),
+    set(show, i, text, ctx) {
+      const mic = parseMic(show, text, ctx?.catalog);
+      let s = show;
+      if (mic?.kind === "library" && !s.microphones.some((m) => m.id === mic.microphoneId)) {
+        const lm = ctx?.catalog?.find((m) => m.id === mic.microphoneId);
+        if (lm) s = ensureShowMic(s, lm).show;
+      }
+      return updateChannel(s, i, { mic });
+    },
+    suggestions: (s, ctx) => [
+      ...new Set([...s.microphones.map((m) => m.model), ...(ctx?.catalog ?? []).map((m) => m.model)]),
+    ],
   },
   {
     key: "stand",

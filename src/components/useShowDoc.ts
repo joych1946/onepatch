@@ -3,7 +3,7 @@
 /**
  * 편집 중인 Show 문서: 실행 취소/다시 실행 히스토리 + 자동 저장.
  * - 변경은 apply(fn)로만 한다. fn이 같은 객체를 돌려주면 변경 없음으로 본다.
- * - 저장은 변경 후 잠시 뒤(디바운스). 검증 오류가 있는 동안은 저장하지 않고 상태로 알린다.
+ * - 저장은 변경 직후 차례로. 검증 오류가 있는 동안은 저장하지 않고 상태로 알린다.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Show } from "@/model/schema";
@@ -11,7 +11,6 @@ import { checkShow, ShowSchema } from "@/model/schema";
 import { getShow, putShow } from "@/storage/showStore";
 
 const HISTORY_LIMIT = 300;
-const SAVE_DELAY_MS = 500;
 
 type Doc = { past: Show[]; present: Show; future: Show[] };
 
@@ -28,7 +27,6 @@ export function useShowDoc(id: string) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [status, setStatus] = useState<SaveStatus>({ kind: "saved", at: null });
   const savedRef = useRef<Show | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     getShow(id).then(
@@ -52,45 +50,55 @@ export function useShowDoc(id: string) {
     };
   }, [present]);
 
-  const save = useCallback(async (show: Show) => {
+  const latest = useRef({ present, valid: true });
+  useEffect(() => {
+    latest.current = { present, valid: errors.length === 0 };
+  }, [present, errors]);
+
+  /**
+   * 저장 펌프: 최신 상태가 저장될 때까지 차례로 저장한다 (동시에 두 번 쓰지 않음).
+   * 변경 직후 바로 부르므로, 빠르게 입력하다 곧바로 창을 닫거나 새로고침해도 잃는 것이 거의 없다.
+   */
+  const saving = useRef(false);
+  const pump = useCallback(async () => {
+    if (saving.current) return;
+    saving.current = true;
     try {
-      await putShow(show);
-      savedRef.current = show;
-      setStatus({ kind: "saved", at: new Date().toLocaleTimeString("ko-KR") });
+      for (;;) {
+        const { present: p, valid } = latest.current;
+        if (!p || !valid || p === savedRef.current) break;
+        await putShow(p);
+        savedRef.current = p;
+      }
+      if (latest.current.present === savedRef.current)
+        setStatus({ kind: "saved", at: new Date().toLocaleTimeString("ko-KR") });
     } catch (e) {
       setStatus({ kind: "error", message: String(e) });
+    } finally {
+      saving.current = false;
     }
   }, []);
 
-  // 자동 저장
+  // 자동 저장. 검증 오류(저장 차단)가 있으면 상태로만 알린다.
   useEffect(() => {
     if (!present || present === savedRef.current) return;
-    if (timer.current) clearTimeout(timer.current);
     if (errors.length) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setStatus({ kind: "invalid", count: errors.length });
       return;
     }
     setStatus({ kind: "pending" });
-    timer.current = setTimeout(() => save(present), SAVE_DELAY_MS);
-  }, [present, errors, save]);
+    void pump();
+  }, [present, errors, pump]);
 
-  // 페이지를 떠날 때: 대기 중이면 즉시 저장, 저장 못 한 변경이 있으면 경고
-  const latest = useRef({ present, valid: true });
-  useEffect(() => {
-    latest.current = { present, valid: errors.length === 0 };
-  }, [present, errors]);
-
+  // 페이지를 떠날 때: 남은 것이 있으면 저장, 오류 때문에 저장 못 한 변경이 있으면 경고
   useEffect(() => {
     const unsaved = () => {
       const { present: p } = latest.current;
       return p !== null && p !== savedRef.current;
     };
     const flush = () => {
-      if (unsaved() && latest.current.valid) {
-        if (timer.current) clearTimeout(timer.current);
-        void save(latest.current.present!);
-      }
+      if (unsaved() && latest.current.valid) void pump();
     };
     const warn = (e: BeforeUnloadEvent) => {
       if (unsaved() && !latest.current.valid) e.preventDefault();
@@ -102,7 +110,7 @@ export function useShowDoc(id: string) {
       window.removeEventListener("beforeunload", warn);
       flush(); // 라우트 이동(언마운트) 시
     };
-  }, [save]);
+  }, [pump]);
 
   const apply = useCallback((fn: (s: Show) => Show) => {
     setDoc((d) => {

@@ -66,7 +66,8 @@ export const MicrophoneSchema = z.object({
   id: Id,
   model: z.string().min(1),
   type: MicTypeSchema,
-  needsPhantom: z.boolean(),
+  /** null = 사양 미확인 (추측으로 채우지 않는다) */
+  needsPhantom: z.boolean().nullable(),
   /** 기본 스탠드 (예: 톨붐, 숏붐, 클램프). 없음은 빈 문자열. */
   defaultStand: z.string(),
 });

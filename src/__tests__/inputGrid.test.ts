@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyShow } from "@/model/factory";
 import { createSampleShow } from "@/sample/fivePieceBand";
+import { createDefaultLibrary } from "@/model/libraryDefaults";
 import { applyPaste, parseTsv, toTsv } from "@/model/inputPaste";
 import { COLUMNS, COL_INDEX, parseBool, parseColor, parseMic, parsePort } from "@/model/inputColumns";
 import { deleteRange, duplicateRange, insertAfter, moveRange } from "@/model/inputOps";
@@ -65,7 +66,8 @@ describe("엑셀 붙여넣기", () => {
   ].join("\r\n");
 
   it("헤더를 인식해 열을 맞추고, 모르는 열은 무시하고, 빈 줄은 건너뛴다", () => {
-    const res = applyPaste(createEmptyShow(), 0, 0, excel);
+    // 새 Show는 마이크가 비어 있고, 이름은 내 라이브러리에서 찾아 Show로 복사된다
+    const res = applyPaste(createEmptyShow(), 0, 0, excel, { catalog: createDefaultLibrary().microphones });
     const s = res.show;
     expect(res.rowCount).toBe(5);
     expect(res.headerMap?.find((h) => h.from === "MON")?.to).toBeNull();
@@ -73,7 +75,7 @@ describe("엑셀 붙여넣기", () => {
     expect(s.inputs.map((c) => c.number)).toEqual([1, 2, 3, 4, 5]);
     expect(s.inputs.map((c) => c.source)).toEqual(["Kick In", "Kick Out", "Snare", "OH L", "Vocal"]);
     expect(s.inputs.map((c) => micName(s, c))).toEqual([
-      "Shure Beta 91A", "Shure Beta 52A", "Shure SM57", "Neumann KM184", "AKG C7",
+      "Shure Beta 91A", "Shure Beta 52A", "Shure SM57", "Neumann KM 184", "AKG C7",
     ]);
     expect(resolvePhantom(s, s.inputs[0])).toBe(true);
     expect(resolveStand(s, s.inputs[2])).toBe("숏붐"); // 빈 칸 → SM57 기본값

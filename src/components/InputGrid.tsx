@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Show } from "@/model/schema";
-import { COLUMNS, FIELD_TO_COL, type Column } from "@/model/inputColumns";
+import { COLUMNS, FIELD_TO_COL, type ColCtx, type Column } from "@/model/inputColumns";
 import {
   appendChannel,
   deleteRange,
@@ -20,7 +20,9 @@ import {
   updateChannel,
 } from "@/model/inputOps";
 import { applyPaste, parseTsv, toTsv } from "@/model/inputPaste";
-import { resolvePhantom, SHORT_NAME_WARN_LENGTH } from "@/model/derive";
+import { phantomUnknown, resolvePhantom, SHORT_NAME_WARN_LENGTH } from "@/model/derive";
+import type { Library } from "@/model/library";
+import PickFlow from "./PickFlow";
 import { COLOR_LABEL, COLOR_SWATCH } from "@/model/labels";
 import type { Color, InputChannel } from "@/model/schema";
 import type { ValidationIssue } from "./useShowDoc";
@@ -51,9 +53,22 @@ interface Props {
   issues: ValidationIssue[];
   renumber: boolean;
   onMessage: (text: string, details?: string[]) => void;
+  /** 내 라이브러리 (불러오는 중이면 null) */
+  library: Library | null;
+  updateLibrary: (fn: (l: Library) => Library) => void;
 }
 
-export default function InputGrid({ show, apply, undo, redo, issues, renumber, onMessage }: Props) {
+export default function InputGrid({
+  show,
+  apply,
+  undo,
+  redo,
+  issues,
+  renumber,
+  onMessage,
+  library,
+  updateLibrary,
+}: Props) {
   const n = show.inputs.length;
   const rowCount = n + 1; // 마지막은 새 채널 입력용 빈 행
   const [active, setActive] = useState<Pos>({ r: 0, c: 1 });
@@ -71,6 +86,9 @@ export default function InputGrid({ show, apply, undo, redo, issues, renumber, o
   const inputRef = useRef<HTMLInputElement>(null);
   const activeCellRef = useRef<HTMLTableCellElement>(null);
   const wantFocus = useRef(true);
+  /** 누르기 입력 창이 열려 있으면 시작 행 */
+  const [picker, setPicker] = useState<number | null>(null);
+  const ctx: ColCtx = useMemo(() => ({ catalog: library?.microphones }), [library]);
 
   // 행이 줄어들면(삭제·실행 취소) 선택을 범위 안으로
   const clampR = (r: number) => Math.max(0, Math.min(rowCount - 1, r));
@@ -86,10 +104,23 @@ export default function InputGrid({ show, apply, undo, redo, issues, renumber, o
   const selRows = sel.r0 <= dataR1 ? range(sel.r0, dataR1) : [];
 
   useEffect(() => {
+    if (picker !== null) {
+      activeCellRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      return;
+    }
     if (!wantFocus.current) return;
     inputRef.current?.focus({ preventScroll: true });
     activeCellRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [a.r, a.c, n]);
+  }, [a.r, a.c, n, picker]);
+
+  const openPicker = (r: number) => {
+    if (!library) return onMessage("라이브러리를 불러오는 중입니다.");
+    if (editRef.current) commit(editRef.current.text, false);
+    setActive({ r, c: 0 });
+    setAnchor({ r, c: 0 });
+    setTabStart(null);
+    setPicker(r);
+  };
 
   const cellIssues = useMemo(() => {
     const m = new Map<string, string>();
@@ -130,7 +161,7 @@ export default function InputGrid({ show, apply, undo, redo, issues, renumber, o
       x = appendChannel(x);
       r = x.inputs.length - 1;
     }
-    return col.set(x, r, text);
+    return col.set(x, r, text, ctx);
   };
 
   const commit = (text: string, fill: boolean) => {
@@ -172,7 +203,7 @@ export default function InputGrid({ show, apply, undo, redo, issues, renumber, o
         (x, r) =>
           range(sel.c0, sel.c1).reduce((y, c) => {
             const col = COLUMNS[c];
-            return col.key === "ch" ? y : (col.set(y, r, "") ?? y);
+            return col.key === "ch" ? y : (col.set(y, r, "", ctx) ?? y);
           }, x),
         s,
       ),
@@ -188,13 +219,13 @@ export default function InputGrid({ show, apply, undo, redo, issues, renumber, o
       // 값 하나를 여러 셀에 붙여넣기 → 선택 범위 채우기
       change((s) =>
         selRows.reduce(
-          (x, r) => range(sel.c0, sel.c1).reduce((y, c) => COLUMNS[c].set(y, r, cells[0][0]) ?? y, x),
+          (x, r) => range(sel.c0, sel.c1).reduce((y, c) => COLUMNS[c].set(y, r, cells[0][0], ctx) ?? y, x),
           s,
         ),
       );
       return;
     }
-    const res = applyPaste(show, a.r, a.c, text);
+    const res = applyPaste(show, a.r, a.c, text, ctx);
     if (res.rowCount === 0) return;
     change(() => res.show);
     const details: string[] = [];
@@ -246,7 +277,7 @@ export default function InputGrid({ show, apply, undo, redo, issues, renumber, o
     if (!edit || !col.suggestions) return [];
     const q = edit.text.trim().toLowerCase();
     return col
-      .suggestions(show)
+      .suggestions(show, ctx)
       .filter((s) => s.toLowerCase().includes(q) && s.toLowerCase() !== q)
       .slice(0, 8);
   })();
@@ -396,7 +427,10 @@ export default function InputGrid({ show, apply, undo, redo, issues, renumber, o
         }
         return;
       case " ":
-        if (e.shiftKey) {
+        if (col.key === "ch" && !e.shiftKey) {
+          handled();
+          openPicker(a.r);
+        } else if (e.shiftKey) {
           handled();
           setAnchor({ r: a.r, c: 0 });
           setActive({ r: a.r, c: LAST_COL });
@@ -469,6 +503,8 @@ export default function InputGrid({ show, apply, undo, redo, issues, renumber, o
       case "stand":
         return <span className={ch.stand === null ? "text-neutral-400" : ""}>{col.text(show, ch)}</span>;
       case "phantom":
+        if (phantomUnknown(show, ch))
+          return <span className="text-amber-600" title="이 마이크의 48V 필요 여부가 미확인입니다 (내 장비 화면에서 채워주세요)">?</span>;
         return resolvePhantom(show, ch) ? (
           <span className={`text-red-600 ${ch.phantom === null ? "opacity-60" : "font-semibold"}`}>48V</span>
         ) : ch.phantom === false ? (
@@ -496,6 +532,13 @@ export default function InputGrid({ show, apply, undo, redo, issues, renumber, o
     <div>
       {/* 툴바 */}
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs" onMouseDown={() => (wantFocus.current = false)}>
+        <button
+          className={`${tool} border-blue-500 font-medium text-blue-700 dark:text-blue-300`}
+          onClick={() => openPicker(a.r)}
+          title="소스 → 마이크를 눌러서 입력 (Ch 칸 클릭, 또는 Ch 열에서 Space)"
+        >
+          누르기 입력 ▸
+        </button>
         <button className={tool} onClick={() => (rowOps.insert(), focusGrid())}>행 삽입 <kbd>⌥N</kbd></button>
         <button className={tool} onClick={() => (rowOps.duplicate(), focusGrid())}>복제 <kbd>⌥D</kbd></button>
         <button className={tool} onClick={() => (rowOps.remove(), focusGrid())}>삭제 <kbd>⌥⌫</kbd></button>
@@ -627,12 +670,13 @@ export default function InputGrid({ show, apply, undo, redo, issues, renumber, o
                       <td
                         key={col.key}
                         ref={isActive ? activeCellRef : undefined}
-                        title={issue}
+                        title={issue ?? (col.key === "ch" ? "눌러서 소스·마이크 선택" : undefined)}
                         aria-selected={inSel}
                         data-active={isActive || undefined}
                         onMouseDown={(e) => {
                           if (isActive && editRef.current) return; // 편집 중인 입력창 안 클릭(커서 이동)
                           e.preventDefault(); // 브라우저가 포커스를 body로 옮기지 않게
+                          if (col.key === "ch" && !e.shiftKey) return openPicker(r);
                           if (editRef.current) commit(editRef.current.text, false);
                           moveTo(r, c, e.shiftKey);
                           setTabStart(null);
@@ -642,7 +686,7 @@ export default function InputGrid({ show, apply, undo, redo, issues, renumber, o
                           if (col.toggle) return toggleSelection();
                           setEdit({ mode: "edit", text: ch ? col.editText(show, ch) : "", sug: -1 });
                         }}
-                        className={`relative h-8 border-l border-neutral-200 px-2 whitespace-nowrap dark:border-neutral-800 ${
+                        className={`relative h-8 border-l ${col.key === "ch" ? "cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-950/40" : ""} border-neutral-200 px-2 whitespace-nowrap dark:border-neutral-800 ${
                           inSel ? "bg-blue-50 dark:bg-blue-950/60" : ""
                         } ${issue ? "bg-red-50 outline outline-1 -outline-offset-1 outline-red-500 dark:bg-red-950/60" : ""} ${
                           isActive ? "outline outline-2 -outline-offset-2 outline-blue-600" : ""
@@ -704,6 +748,25 @@ export default function InputGrid({ show, apply, undo, redo, issues, renumber, o
           </tbody>
         </table>
       </div>
+
+      {picker !== null && library && (
+        <PickFlow
+          show={show}
+          library={library}
+          start={picker}
+          renumber={renumber}
+          apply={apply}
+          updateLibrary={updateLibrary}
+          onRow={(r) => {
+            setActive({ r, c: 0 });
+            setAnchor({ r, c: 0 });
+          }}
+          onClose={(r) => {
+            setPicker(null);
+            moveTo(r, 0);
+          }}
+        />
+      )}
     </div>
   );
 }

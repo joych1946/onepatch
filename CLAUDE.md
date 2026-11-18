@@ -30,3 +30,5 @@
 - 데이터 모델의 원천은 `src/model/schema.ts`(zod). 타입은 여기서 z.infer로만 파생한다.
 - 검증: `npm test`(vitest), `npm run typecheck`, `npm run lint`, `npm run build`
 - Next.js 버전별 주의사항: @AGENTS.md
+- 내 라이브러리(보유 장비·소스 목록·추천 마이크)는 Show와 별개로 `src/model/library.ts` 스키마, IndexedDB `library` 저장소에 둔다. Show는 고른 마이크의 사양을 `microphones`에 복사해 JSON 하나로 완결된다.
+- 누르기 입력의 계산은 `src/model/pickFlow.ts`(순수 함수), 화면은 `src/components/PickFlow.tsx`. 기본 마이크·소스 목록은 `src/model/libraryDefaults.ts`.

@@ -1,5 +1,5 @@
 /** 엑셀/구글시트 ↔ 인풋리스트 복사·붙여넣기 (TSV) */
-import { COLUMNS, matchHeader, type Column } from "./inputColumns";
+import { COLUMNS, matchHeader, type ColCtx, type Column } from "./inputColumns";
 import { newChannel, nextNumber, withInputs } from "./inputOps";
 import type { Show } from "./schema";
 
@@ -60,6 +60,7 @@ export function applyPaste(
   startRow: number,
   startCol: number,
   text: string,
+  ctx?: ColCtx,
 ): PasteResult {
   let rows = parseTsv(text);
   let cols: (Column | null)[];
@@ -94,7 +95,7 @@ export function applyPaste(
     for (const { c, j } of order) {
       const value = cells[j] ?? "";
       if (c.key === "ch" && value.trim() === "") continue;
-      const next = c.set(s, index, value);
+      const next = c.set(s, index, value, ctx);
       if (next) s = next;
       else skipped.push(`${index + 1}행 ${c.label}: "${value}"`);
     }

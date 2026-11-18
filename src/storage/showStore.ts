@@ -2,23 +2,9 @@
  * 브라우저 로컬 저장소(IndexedDB). Show 하나 = 레코드 하나.
  * 읽을 때도 스키마 검증을 거쳐, 손상된 레코드가 화면까지 오지 않게 한다.
  */
-import { openDB, type IDBPDatabase } from "idb";
 import { parseShow } from "@/model/serialize";
 import type { Show } from "@/model/schema";
-
-const DB_NAME = "onepatch";
-const STORE = "shows";
-
-let dbPromise: Promise<IDBPDatabase> | null = null;
-
-function db() {
-  dbPromise ??= openDB(DB_NAME, 1, {
-    upgrade(d) {
-      d.createObjectStore(STORE, { keyPath: "id" });
-    },
-  });
-  return dbPromise;
-}
+import { db, SHOWS as STORE } from "./db";
 
 export type ShowSummary = Pick<
   Show,
