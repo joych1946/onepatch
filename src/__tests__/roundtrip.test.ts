@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createSampleShow } from "@/sample/fivePieceBand";
 import { createEmptyShow, duplicateShow } from "@/model/factory";
 import { parseShowJson, showToJson } from "@/model/serialize";
+import { checkShow } from "@/model/schema";
 import { deleteShow, getShow, listShows, putShow } from "@/storage/showStore";
 
 describe("샘플 Show", () => {
@@ -43,7 +44,7 @@ describe("검증", () => {
     expect(parseShowJson(showToJson(d)).ok).toBe(true);
   });
 
-  it("깨진 참조와 중복 채널 번호를 잡아낸다", () => {
+  it("깨진 참조는 거부하고, 번호 중복·포트 범위 초과는 경고로 남긴다", () => {
     const s = createSampleShow();
     s.inputs[0].mic = { kind: "library", microphoneId: "nope" };
     s.inputs[1].number = s.inputs[2].number;
@@ -54,10 +55,12 @@ describe("검증", () => {
     if (!r.ok) {
       const all = r.errors.join("\n");
       expect(all).toContain("없는 마이크");
-      expect(all).toContain("채널 번호 중복");
-      expect(all).toContain("포트 범위 초과");
       expect(all).toContain("없는 DCA");
+      expect(all).not.toContain("채널 번호 중복");
     }
+    const warnings = checkShow(s).warnings.map((w) => w.message).join("\n");
+    expect(warnings).toContain("채널 번호 중복");
+    expect(warnings).toContain("포트 범위 초과");
   });
 
   it("JSON이 아니거나 필드가 빠지면 거부한다", () => {
