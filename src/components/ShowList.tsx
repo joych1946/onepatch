@@ -14,6 +14,10 @@ import {
   type ShowSummary,
 } from "@/storage/showStore";
 import { isTypingTarget } from "@/lib/download";
+import { BUILTIN_SHOW_TEMPLATES, showFromTemplate } from "@/model/templates";
+import type { Show } from "@/model/schema";
+import { useLibrary } from "./useLibrary";
+import ChoiceSheet from "./ChoiceSheet";
 
 type Notice = { kind: "info" | "error"; text: string; details?: string[] };
 
@@ -23,6 +27,8 @@ export default function ShowList() {
   const [selected, setSelected] = useState(0);
   const [notice, setNotice] = useState<Notice | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { library } = useLibrary();
+  const [tplOpen, setTplOpen] = useState(false);
 
   const refresh = useCallback(async (selectId?: string) => {
     const list = await listShows();
@@ -53,6 +59,11 @@ export default function ShowList() {
       setNotice({ kind: "info", text: "샘플 Show를 추가했습니다." });
     },
     open: (id: string) => router.push(`/shows/${id}`),
+    /** 템플릿으로 만들고 바로 연다 */
+    fromTemplate: async (show: Show) => {
+      await putShow(show);
+      router.push(`/shows/${show.id}`);
+    },
     duplicate: async (id: string) => {
       const show = await getShow(id);
       if (!show) return;
@@ -100,7 +111,7 @@ export default function ShowList() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (tplOpen || isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       const n = shows?.length ?? 0;
       switch (e.key) {
         case "ArrowDown":
@@ -127,6 +138,9 @@ export default function ShowList() {
         case "i":
           fileRef.current?.click();
           break;
+        case "t":
+          setTplOpen(true);
+          break;
         default:
           return;
       }
@@ -148,6 +162,9 @@ export default function ShowList() {
         </Link>
         <button className={btn} onClick={() => run(actions.create())}>
           새 Show <kbd>N</kbd>
+        </button>
+        <button className={btn} onClick={() => setTplOpen(true)}>
+          템플릿으로 새 Show <kbd>T</kbd>
         </button>
         <button className={btn} onClick={() => fileRef.current?.click()}>
           JSON 가져오기 <kbd>I</kbd>
@@ -265,8 +282,41 @@ export default function ShowList() {
       <p className="mt-6 text-xs text-neutral-500">
         <kbd>↑</kbd>
         <kbd>↓</kbd> 선택 · <kbd>Enter</kbd> 열기 · <kbd>D</kbd> 복제 · <kbd>Delete</kbd> 삭제
-        · <kbd>N</kbd> 새 Show · <kbd>I</kbd> 가져오기 — 데이터는 이 브라우저에만 저장됩니다.
+        · <kbd>N</kbd> 새 Show · <kbd>T</kbd> 템플릿으로 새 Show · <kbd>I</kbd> 가져오기 — 데이터는 이 브라우저에만 저장됩니다.
       </p>
+
+      {tplOpen && (
+        <ChoiceSheet
+          title="템플릿으로 새 Show"
+          query=""
+          setQuery={() => {}}
+          placeholder="고르면 새 Show를 만들고 엽니다"
+          sections={[
+            {
+              title: "기본 틀",
+              items: [
+                { key: "empty", label: "빈 Show", sub: "Rio3224+Rio1608, Main L/R·Mono/Sub만", run: () => run(actions.fromTemplate(createEmptyShow())) },
+                ...BUILTIN_SHOW_TEMPLATES.map((t) => ({ key: t.id, label: t.name, sub: t.description, run: () => run(actions.fromTemplate(t.build())) })),
+              ],
+            },
+            ...(library?.showTemplates.length
+              ? [
+                  {
+                    title: "내 Show 템플릿",
+                    items: library.showTemplates.map((t) => ({
+                      key: t.id,
+                      label: t.name,
+                      sub: `인풋 ${t.show.inputs.length}ch · 아웃풋 ${t.show.outputs.length} · DCA ${t.show.dcas.length} · 박스 ${t.show.stageBoxes.map((b) => b.name).join("+")}`,
+                      run: () => run(actions.fromTemplate(showFromTemplate(t, `${t.name} (새 Show)`))),
+                    })),
+                  },
+                ]
+              : []),
+          ]}
+          onClose={() => setTplOpen(false)}
+          hint={<><kbd>↑↓</kbd> 이동 · <kbd>Enter</kbd> 만들고 열기 · <kbd>Esc</kbd> 닫기 · 내 템플릿은 Show 화면의 “Show 템플릿으로 저장”으로 만듭니다</>}
+        />
+      )}
     </main>
   );
 }

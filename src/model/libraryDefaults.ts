@@ -249,6 +249,8 @@ export function createDefaultLibrary(): Library {
     microphones,
     groups: ALL_GROUPS.map(([id, name]) => ({ id, name })),
     sources: toSources(ALL_GROUPS),
+    blockTemplates: [],
+    showTemplates: [],
   };
 }
 

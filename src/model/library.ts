@@ -11,7 +11,9 @@ import { newId } from "./factory";
 import { bareModel, norm } from "./text";
 import {
   ColorSchema,
+  MicrophoneSchema,
   MicTypeSchema,
+  ShowSchema,
   type InputChannel,
   type Microphone,
   type MicType,
@@ -53,6 +55,32 @@ export const SourceDefSchema = z.object({
   next: z.array(Id).default([]),
 });
 
+/**
+ * 템플릿 채널: 채널 하나를 Show 밖에 저장할 수 있는 모양.
+ * 마이크는 사양 사본을 함께 두어, 내 라이브러리에 없는 마이크도 그대로 되살린다.
+ * DCA·뮤트 그룹은 이름으로 저장하고, 삽입할 때 같은 이름을 찾거나 새로 만든다.
+ */
+export const TemplateChannelSchema = z.object({
+  source: z.string(),
+  shortName: z.string(),
+  performer: z.string().default(""),
+  mic: MicrophoneSchema.nullable(),
+  /** 라이브러리에 없는 장비의 자유 입력 이름 ("" = 없음) */
+  customMic: z.string().default(""),
+  stand: z.string().nullable(),
+  phantom: z.boolean().nullable(),
+  stereoLinkNext: z.boolean(),
+  color: ColorSchema,
+  dcas: z.array(z.string()).default([]),
+  mutes: z.array(z.string()).default([]),
+  notes: z.string().default(""),
+});
+
+export const BlockTemplateSchema = z.object({ id: Id, name: z.string().min(1), channels: z.array(TemplateChannelSchema) });
+
+/** Show 템플릿: Show 전체(스테이지박스, 아웃풋, DCA·뮤트, 인풋)를 틀로 */
+export const ShowTemplateSchema = z.object({ id: Id, name: z.string().min(1), show: ShowSchema });
+
 export const LibrarySchema = z.object({
   schemaVersion: z.literal(LIBRARY_VERSION),
   /** 어느 기본 목록 판까지 합쳐 넣었는지 (새 기본 항목을 기존 저장본에 한 번만 추가하려고) */
@@ -61,12 +89,18 @@ export const LibrarySchema = z.object({
   groups: z.array(SourceGroupSchema),
   /** 배열 순서 = 같은 악기군 안에서의 순서 */
   sources: z.array(SourceDefSchema),
+  /** 내가 저장한 템플릿 (기본 제공 템플릿은 model/templates.ts) */
+  blockTemplates: z.array(BlockTemplateSchema).default([]),
+  showTemplates: z.array(ShowTemplateSchema).default([]),
 });
 
 export type LibraryMic = z.infer<typeof LibraryMicSchema>;
 export type SourceGroup = z.infer<typeof SourceGroupSchema>;
 export type SourceDef = z.infer<typeof SourceDefSchema>;
 export type Library = z.infer<typeof LibrarySchema>;
+export type TemplateChannel = z.infer<typeof TemplateChannelSchema>;
+export type BlockTemplate = z.infer<typeof BlockTemplateSchema>;
+export type ShowTemplate = z.infer<typeof ShowTemplateSchema>;
 
 export const libId = (prefix: string) => `${prefix}-u-${newId().slice(0, 8)}`;
 

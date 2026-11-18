@@ -11,7 +11,7 @@ import { norm } from "@/model/text";
 import { useLibrary } from "./useLibrary";
 
 type Update = (fn: (l: Library) => Library) => void;
-type Tab = "mics" | "sources";
+type Tab = "mics" | "sources" | "templates";
 
 const TAB_KEY = "onepatch.libraryTab";
 const input =
@@ -28,7 +28,7 @@ export default function LibraryView() {
     try {
       const v = localStorage.getItem(TAB_KEY);
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (v === "mics" || v === "sources") setTab(v);
+      if (v === "mics" || v === "sources" || v === "templates") setTab(v);
     } catch {}
   }, []);
   const choose = (t: Tab) => {
@@ -66,15 +66,18 @@ export default function LibraryView() {
       <div role="tablist" className="mb-4 flex gap-2 border-b border-neutral-200 dark:border-neutral-800">
         {tabBtn("mics", `마이크·DI (${library.microphones.length})`)}
         {tabBtn("sources", `소스·추천 마이크 (${library.sources.length})`)}
+        {tabBtn("templates", `내 템플릿 (${library.blockTemplates.length + library.showTemplates.length})`)}
       </div>
-      {tab === "mics" ? <MicsTab library={library} update={update} /> : <SourcesTab library={library} update={update} />}
+      {tab === "mics" && <MicsTab library={library} update={update} />}
+      {tab === "sources" && <SourcesTab library={library} update={update} />}
+      {tab === "templates" && <TemplatesTab library={library} update={update} />}
 
       <footer className="mt-10 border-t border-neutral-200 pt-4 text-xs text-neutral-500 dark:border-neutral-800">
         <button
           className={btn}
           onClick={() => {
-            if (confirm("마이크·소스 목록을 처음 기본값으로 되돌립니다. 보유 수량과 직접 추가·수정한 내용이 모두 사라집니다. 계속할까요?"))
-              update(() => createDefaultLibrary());
+            if (confirm("마이크·소스 목록을 처음 기본값으로 되돌립니다. 보유 수량과 직접 추가·수정한 마이크·소스가 사라집니다(내 템플릿은 남습니다). 계속할까요?"))
+              update((l) => ({ ...createDefaultLibrary(), blockTemplates: l.blockTemplates, showTemplates: l.showTemplates }));
           }}
         >
           기본값으로 초기화
@@ -471,6 +474,59 @@ function SourceRow({
         {addError && <span className="text-xs text-red-600">{addError}</span>}
       </div>
     </li>
+  );
+}
+
+/* ───────────── 내 템플릿 ───────────── */
+
+function TemplatesTab({ library, update }: { library: Library; update: Update }) {
+  const rename = (key: "blockTemplates" | "showTemplates", id: string, name: string) =>
+    update((l) => ({ ...l, [key]: l[key].map((t) => (t.id === id ? { ...t, name } : t)) }));
+  const remove = (key: "blockTemplates" | "showTemplates", id: string, name: string) => {
+    if (confirm(`템플릿 "${name}"을(를) 삭제할까요?`)) update((l) => ({ ...l, [key]: l[key].filter((t) => t.id !== id) }));
+  };
+  const row = "flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 p-2 dark:border-neutral-800";
+  return (
+    <div className="space-y-8">
+      <section>
+        <h2 className="mb-1 font-semibold">블록 템플릿 ({library.blockTemplates.length})</h2>
+        <p className="mb-2 text-xs text-neutral-500">
+          인풋 표에서 채널(행)을 선택하고 “템플릿으로 저장”(⌥S)으로 만듭니다. “템플릿 ▸”(⌥T)에서 원하는 위치에 넣습니다. 기본 제공 블록(드럼 8ch 등)은 내 소스 목록을 따라갑니다.
+        </p>
+        {library.blockTemplates.length === 0 && <p className="text-neutral-500">아직 없습니다.</p>}
+        <ul className="space-y-2">
+          {library.blockTemplates.map((t) => (
+            <li key={t.id} className={row}>
+              <DraftInput className={`${input} w-56 font-medium`} value={t.name} onCommit={(v) => v.trim() && rename("blockTemplates", t.id, v.trim())} aria-label="템플릿 이름" />
+              <span className="text-xs text-neutral-500">
+                {t.channels.length}ch · {t.channels.map((c) => c.source || c.shortName).join(", ")}
+              </span>
+              <button className={`${btn} ml-auto`} onClick={() => remove("blockTemplates", t.id, t.name)} aria-label={`${t.name} 삭제`}>
+                삭제
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+      <section>
+        <h2 className="mb-1 font-semibold">Show 템플릿 ({library.showTemplates.length})</h2>
+        <p className="mb-2 text-xs text-neutral-500">Show 화면의 “Show 템플릿으로 저장”으로 만들고, 목록 화면의 “템플릿으로 새 Show”(T)에서 씁니다.</p>
+        {library.showTemplates.length === 0 && <p className="text-neutral-500">아직 없습니다.</p>}
+        <ul className="space-y-2">
+          {library.showTemplates.map((t) => (
+            <li key={t.id} className={row}>
+              <DraftInput className={`${input} w-56 font-medium`} value={t.name} onCommit={(v) => v.trim() && rename("showTemplates", t.id, v.trim())} aria-label="템플릿 이름" />
+              <span className="text-xs text-neutral-500">
+                박스 {t.show.stageBoxes.map((b) => b.name).join("+")} · 인풋 {t.show.inputs.length}ch · 아웃풋 {t.show.outputs.length} · DCA {t.show.dcas.length}
+              </span>
+              <button className={`${btn} ml-auto`} onClick={() => remove("showTemplates", t.id, t.name)} aria-label={`${t.name} 삭제`}>
+                삭제
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
   );
 }
 

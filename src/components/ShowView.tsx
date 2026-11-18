@@ -13,6 +13,8 @@ import OutputsView from "./OutputsView";
 import GroupsView from "./GroupsView";
 import PatchView from "./PatchView";
 import IssuesPanel from "./IssuesPanel";
+import { SaveNameDialog } from "./TemplateDialogs";
+import { makeShowTemplate } from "@/model/templates";
 import { FIELD_TO_COL, type ColKey } from "@/model/inputColumns";
 import type { GroupKind } from "@/model/outputOps";
 import { busIssueCell } from "@/model/outputColumns";
@@ -39,6 +41,7 @@ export default function ShowView({ id }: { id: string }) {
   const [renumber, setRenumber] = useState(true);
   const [tab, setTabState] = useState<Tab>("inputs");
   const [focusReq, setFocusReq] = useState<FocusReq | null>(null);
+  const [savingTpl, setSavingTpl] = useState(false);
 
   useEffect(() => {
     try {
@@ -158,6 +161,9 @@ export default function ShowView({ id }: { id: string }) {
         </button>
         <button className={btn} onClick={doc.redo} disabled={!doc.canRedo} title="⇧⌘Z / Ctrl+Y">
           다시 실행
+        </button>
+        <button className={btn} onClick={() => setSavingTpl(true)} disabled={!lib.library} title="이 Show의 스테이지박스·아웃풋·DCA·인풋을 새 Show의 틀로 저장">
+          Show 템플릿으로 저장
         </button>
         <button className={btn} onClick={exportJson}>
           JSON 내보내기
@@ -286,6 +292,20 @@ export default function ShowView({ id }: { id: string }) {
       </section>
 
       <ReadonlySections show={show} />
+
+      {savingTpl && (
+        <SaveNameDialog
+          title="Show 템플릿으로 저장"
+          description={`스테이지박스 ${show.stageBoxes.length}, 아웃풋 ${show.outputs.length}, DCA ${show.dcas.length}, 뮤트 ${show.muteGroups.length}, 인풋 ${show.inputs.length}ch를 그대로 저장합니다. 목록 화면의 “템플릿으로 새 Show”에서 씁니다.`}
+          initial={`${show.title} 틀`}
+          onSave={(name) => {
+            lib.update((l) => ({ ...l, showTemplates: [...l.showTemplates, makeShowTemplate(name, show)] }));
+            setMessage({ text: `Show 템플릿 “${name}”을 저장했습니다. 목록 화면의 “템플릿으로 새 Show”(T)에서 쓸 수 있습니다.` });
+            setSavingTpl(false);
+          }}
+          onClose={() => setSavingTpl(false)}
+        />
+      )}
     </main>
   );
 }

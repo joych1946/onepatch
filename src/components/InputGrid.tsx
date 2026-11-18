@@ -25,6 +25,8 @@ import { applyPaste, parseTsv, toTsv } from "@/model/inputPaste";
 import { phantomUnknown, resolvePhantom, SHORT_NAME_WARN_LENGTH } from "@/model/derive";
 import type { Library } from "@/model/library";
 import PickFlow from "./PickFlow";
+import { BlockPicker, SaveNameDialog } from "./TemplateDialogs";
+import { makeBlockTemplate, toTemplateChannels } from "@/model/templates";
 import { COLOR_LABEL, COLOR_SWATCH } from "@/model/labels";
 import type { Color, InputChannel } from "@/model/schema";
 import type { ValidationIssue } from "./useShowDoc";
@@ -93,6 +95,10 @@ export default function InputGrid({
   const wantFocus = useRef(true);
   /** 누르기 입력 창이 열려 있으면 시작 행 */
   const [picker, setPicker] = useState<number | null>(null);
+  /** 블록 템플릿 창: 삽입 위치(이 행 앞) */
+  const [blockAt, setBlockAt] = useState<number | null>(null);
+  const [saving, setSaving] = useState<number[] | null>(null);
+  const dialogOpen = picker !== null || blockAt !== null || saving !== null;
   const ctx: ColCtx = useMemo(() => ({ catalog: library?.microphones }), [library]);
 
   // 행이 줄어들면(삭제·실행 취소) 선택을 범위 안으로
@@ -109,14 +115,14 @@ export default function InputGrid({
   const selRows = sel.r0 <= dataR1 ? range(sel.r0, dataR1) : [];
 
   useEffect(() => {
-    if (picker !== null) {
+    if (dialogOpen) {
       activeCellRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
       return;
     }
     if (!wantFocus.current) return;
     inputRef.current?.focus({ preventScroll: true });
     activeCellRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [a.r, a.c, n, picker]);
+  }, [a.r, a.c, n, dialogOpen]);
 
   useEffect(() => {
     if (!focusRequest) return;
@@ -132,6 +138,17 @@ export default function InputGrid({
       activeCellRef.current?.scrollIntoView({ block: "center", inline: "nearest" });
     });
   }, [focusRequest]);
+
+  const openBlocks = () => {
+    if (!library) return onMessage("라이브러리를 불러오는 중입니다.");
+    if (editRef.current) commit(editRef.current.text, false);
+    setBlockAt(a.r);
+  };
+  const saveSelection = () => {
+    if (!library) return onMessage("라이브러리를 불러오는 중입니다.");
+    if (!selRows.length) return onMessage("템플릿으로 저장할 채널(행)을 먼저 선택하세요. (Shift+방향키, Shift+Space)");
+    setSaving(selRows);
+  };
 
   const openPicker = (r: number) => {
     if (!library) return onMessage("라이브러리를 불러오는 중입니다.");
@@ -370,6 +387,8 @@ export default function InputGrid({
       const ops: Record<string, () => void> = {
         KeyN: rowOps.insert,
         KeyD: rowOps.duplicate,
+        KeyT: () => openBlocks(),
+        KeyS: () => saveSelection(),
         Backspace: rowOps.remove,
         Delete: rowOps.remove,
         ArrowUp: () => selRows.length && sel.r0 > 0 && rowOps.move(sel.r0, dataR1, sel.r0 - 1),
@@ -559,6 +578,13 @@ export default function InputGrid({
         >
           누르기 입력 ▸
         </button>
+        <button className={`${tool} border-blue-500 font-medium text-blue-700 dark:text-blue-300`} onClick={openBlocks} title="드럼 8ch, 보컬 4 같은 채널 묶음을 지금 행 앞에 넣기">
+          템플릿 ▸ <kbd>⌥T</kbd>
+        </button>
+        <button className={tool} onClick={saveSelection} disabled={!selRows.length} title="선택한 채널들을 내 블록 템플릿으로 저장">
+          템플릿으로 저장 <kbd>⌥S</kbd>
+        </button>
+        <span className="mx-1 h-4 w-px bg-neutral-300 dark:bg-neutral-700" />
         <button className={tool} onClick={() => (rowOps.insert(), focusGrid())}>행 삽입 <kbd>⌥N</kbd></button>
         <button className={tool} onClick={() => (rowOps.duplicate(), focusGrid())}>복제 <kbd>⌥D</kbd></button>
         <button className={tool} onClick={() => (rowOps.remove(), focusGrid())}>삭제 <kbd>⌥⌫</kbd></button>
@@ -790,6 +816,43 @@ export default function InputGrid({
         </table>
       </div>
 
+      {blockAt !== null && library && (
+        <BlockPicker
+          show={show}
+          library={library}
+          at={blockAt}
+          renumber={renumber}
+          apply={apply}
+          onInserted={(from, to) => {
+            setBlockAt(to + 1);
+            setAnchor({ r: from, c: a.c });
+            setActive({ r: to, c: a.c });
+          }}
+          onClose={() => {
+            setBlockAt(null);
+            wantFocus.current = true;
+            requestAnimationFrame(focusGrid);
+          }}
+        />
+      )}
+      {saving !== null && (
+        <SaveNameDialog
+          title={`선택한 ${saving.length}채널을 블록 템플릿으로 저장`}
+          description={`${saving.map((r) => show.inputs[r]?.source).filter(Boolean).slice(0, 8).join(", ")}${saving.length > 8 ? " …" : ""} — 마이크·48V·스탠드·컬러·DCA까지 저장됩니다. 패치는 넣을 때 새로 매깁니다.`}
+          initial={show.inputs[saving[0]]?.source ? `${show.inputs[saving[0]].source} 외 ${saving.length - 1}` : "내 템플릿"}
+          onSave={(name) => {
+            const t = makeBlockTemplate(name, toTemplateChannels(show, saving));
+            updateLibrary((l) => ({ ...l, blockTemplates: [...l.blockTemplates, t] }));
+            onMessage(`블록 템플릿 “${name}”(${t.channels.length}ch)을 저장했습니다. 템플릿 ▸ (⌥T)에서 넣을 수 있습니다.`);
+            setSaving(null);
+            requestAnimationFrame(focusGrid);
+          }}
+          onClose={() => {
+            setSaving(null);
+            requestAnimationFrame(focusGrid);
+          }}
+        />
+      )}
       {picker !== null && library && (
         <PickFlow
           show={show}
