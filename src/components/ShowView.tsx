@@ -88,6 +88,7 @@ export default function ShowView({ id }: { id: string }) {
       if (e.defaultPrevented || isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "Escape") router.push("/");
       else if (e.key === "e") exportJson();
+      else if (e.key === "p" && show) router.push(`/shows/${show.id}/print`);
       else return;
       e.preventDefault();
     };
@@ -162,6 +163,9 @@ export default function ShowView({ id }: { id: string }) {
         <button className={btn} onClick={doc.redo} disabled={!doc.canRedo} title="⇧⌘Z / Ctrl+Y">
           다시 실행
         </button>
+        <Link href={`/shows/${show.id}/print`} className={`${btn} self-center`} title="인풋·아웃풋 리스트, 패치 시트, 집계표, 라벨, 엑셀 (P)">
+          출력·인쇄
+        </Link>
         <button className={btn} onClick={() => setSavingTpl(true)} disabled={!lib.library} title="이 Show의 스테이지박스·아웃풋·DCA·인풋을 새 Show의 틀로 저장">
           Show 템플릿으로 저장
         </button>
@@ -286,7 +290,7 @@ export default function ShowView({ id }: { id: string }) {
             <li><kbd>⌘/Ctrl</kbd>+<kbd>C</kbd>/<kbd>X</kbd>/<kbd>V</kbd> 복사·잘라내기·붙여넣기 (엑셀 호환, 헤더 자동 인식)</li>
             <li><kbd>⌘/Ctrl</kbd>+<kbd>Z</kbd> 실행 취소 · <kbd>⇧⌘Z</kbd>/<kbd>Ctrl</kbd>+<kbd>Y</kbd> 다시 실행</li>
             <li><kbd>⌥/Alt</kbd>+<kbd>N</kbd> 행 삽입 · <kbd>D</kbd> 복제 · <kbd>⌫</kbd> 삭제 · <kbd>↑↓</kbd> 순서 이동</li>
-            <li>그리드 밖에서 <kbd>E</kbd> JSON 내보내기 · <kbd>Esc</kbd> 목록 (그리드에서 <kbd>Esc</kbd>로 빠져나옴)</li>
+            <li>그리드 밖에서 <kbd>E</kbd> JSON 내보내기 · <kbd>P</kbd> 출력·인쇄 · <kbd>Esc</kbd> 목록 (그리드에서 <kbd>Esc</kbd>로 빠져나옴)</li>
           </ul>
         </details>
       </section>
