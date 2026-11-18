@@ -60,7 +60,7 @@ describe("검증", () => {
     }
     const warnings = checkShow(s).warnings.map((w) => w.message).join("\n");
     expect(warnings).toContain("채널 번호 중복");
-    expect(warnings).toContain("포트 범위 초과");
+    expect(warnings).toContain("포트 수 초과");
   });
 
   it("JSON이 아니거나 필드가 빠지면 거부한다", () => {

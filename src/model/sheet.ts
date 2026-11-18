@@ -29,6 +29,8 @@ export interface SheetColumn<T> {
   render?(show: Show, row: T): ReactNode;
   /** Delete로 지울 수 없는 열 (번호 등) */
   noClear?: boolean;
+  /** 보기만 하는 열 (계산값) */
+  readOnly?: boolean;
 }
 
 export function matchSheetHeader<T>(cols: SheetColumn<T>[], cell: string): SheetColumn<T> | null {
@@ -60,7 +62,7 @@ export function sheetPaste<T>(
     rows = rows.slice(1);
   } else {
     const width = rows.reduce((m, r) => Math.max(m, r.length), 0);
-    map = Array.from({ length: width }, (_, j) => cols[startCol + j] ?? null);
+    map = Array.from({ length: width }, (_, j) => cols[startCol + j] ?? null).map((c) => (c?.readOnly ? null : c));
   }
   rows = rows.filter((r) => r.some((c) => c.trim() !== ""));
   const order = map

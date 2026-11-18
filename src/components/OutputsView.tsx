@@ -26,9 +26,10 @@ interface Props {
   renumber: boolean;
   issues: ValidationIssue[];
   onMessage: (text: string, details?: string[]) => void;
+  focusRequest?: { kind: BusKind; row: number; col: string; n: number } | null;
 }
 
-export default function OutputsView({ show, apply, undo, redo, renumber, issues, onMessage }: Props) {
+export default function OutputsView({ show, apply, undo, redo, renumber, issues, onMessage, focusRequest }: Props) {
   const [picker, setPicker] = useState<{ kind: BusKind; row: number } | null>(null);
   const handles = useRef<Record<BusKind, SheetHandle | null>>({ aux: null, matrix: null, main: null });
 
@@ -82,6 +83,7 @@ export default function OutputsView({ show, apply, undo, redo, renumber, issues,
               }}
               autoFocus={k === 0}
               paused={picker !== null}
+              focusRequest={focusRequest?.kind === kind ? focusRequest : null}
               activeRow={picker?.kind === kind ? picker.row : null}
             />
           </section>

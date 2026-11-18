@@ -11,14 +11,22 @@ import { downloadText, isTypingTarget } from "@/lib/download";
 import InputGrid from "./InputGrid";
 import OutputsView from "./OutputsView";
 import GroupsView from "./GroupsView";
+import PatchView from "./PatchView";
+import IssuesPanel from "./IssuesPanel";
+import { FIELD_TO_COL, type ColKey } from "@/model/inputColumns";
+import type { GroupKind } from "@/model/outputOps";
+import { busIssueCell } from "@/model/outputColumns";
+import type { BusKind, InputChannel } from "@/model/schema";
 import { useShowDoc, type SaveStatus } from "./useShowDoc";
 import { useLibrary } from "./useLibrary";
 import { quantityIssues } from "@/model/library";
 
 const RENUMBER_KEY = "onepatch.renumber";
 const TAB_KEY = "onepatch.showTab";
-type Tab = "inputs" | "outputs" | "groups";
-const TABS: Tab[] = ["inputs", "outputs", "groups"];
+type Tab = "inputs" | "outputs" | "groups" | "patch";
+const TABS: Tab[] = ["inputs", "outputs", "groups", "patch"];
+/** 오류 검사 패널에서 누른 칸으로 이동 요청 */
+type FocusReq = { tab: Tab; kind?: string; row: number; col: string; n: number };
 
 type Message = { text: string; details?: string[] };
 
@@ -30,6 +38,7 @@ export default function ShowView({ id }: { id: string }) {
   const [message, setMessage] = useState<Message | null>(null);
   const [renumber, setRenumber] = useState(true);
   const [tab, setTabState] = useState<Tab>("inputs");
+  const [focusReq, setFocusReq] = useState<FocusReq | null>(null);
 
   useEffect(() => {
     try {
@@ -62,7 +71,7 @@ export default function ShowView({ id }: { id: string }) {
   // ⌥/Alt+1·2·3: 탭 전환 (그리드 안에서도)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const m = e.code.match(/^Digit([1-3])$/);
+      const m = e.code.match(/^Digit([1-4])$/);
       if (!m || !e.altKey || e.metaKey || e.ctrlKey) return;
       e.preventDefault();
       setTab(TABS[Number(m[1]) - 1]);
@@ -96,10 +105,32 @@ export default function ShowView({ id }: { id: string }) {
   const warnings = [...doc.warnings, ...(lib.library ? quantityIssues(lib.library, show) : [])];
   const allIssues = [...doc.errors, ...warnings];
   const area = (i: { path: PropertyKey[] }): Tab | null =>
-    i.path[0] === "inputs" ? "inputs" : i.path[0] === "outputs" ? "outputs" : i.path[0] === "dcas" || i.path[0] === "muteGroups" ? "groups" : null;
-  const otherIssues = allIssues.filter((i) => area(i) === null);
-  const tabIssues = allIssues.filter((i) => area(i) === tab);
+    i.path[0] === "inputs"
+      ? "inputs"
+      : i.path[0] === "outputs"
+        ? "outputs"
+        : i.path[0] === "dcas" || i.path[0] === "muteGroups"
+          ? "groups"
+          : i.path[0] === "stageBoxes"
+            ? "patch"
+            : null;
   const issueCount = (t: Tab) => allIssues.filter((i) => area(i) === t).length;
+
+  /** 오류 검사 패널에서 누른 문제의 칸으로 이동 */
+  const goTo = (i: { path: PropertyKey[] }) => {
+    const t = area(i);
+    const row = typeof i.path[1] === "number" ? i.path[1] : 0;
+    const n = (focusReq?.n ?? 0) + 1;
+    if (t === "inputs")
+      setFocusReq({ tab: t, row, col: FIELD_TO_COL[i.path[2] as keyof InputChannel] ?? "source", n });
+    else if (t === "outputs") {
+      const cell = busIssueCell(show, i.path);
+      if (cell) setFocusReq({ tab: t, kind: cell.kind, row: cell.row, col: cell.col, n });
+    } else if (t === "groups") setFocusReq({ tab: t, kind: i.path[0] === "dcas" ? "dca" : "mute", row, col: "num", n });
+    else if (t === "patch") setFocusReq({ tab: t, row, col: "name", n });
+    if (t && t !== tab) setTabState(t);
+  };
+  const req = (t: Tab) => (focusReq?.tab === t ? focusReq : null);
   const onMessage = (text: string, details?: string[]) => setMessage({ text, details });
   const btn =
     "rounded border border-neutral-300 dark:border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-40";
@@ -140,7 +171,9 @@ export default function ShowView({ id }: { id: string }) {
               ? `인풋 (${show.inputs.length}ch)`
               : t === "outputs"
                 ? `아웃풋 (${show.outputs.length})`
-                : `DCA·뮤트 (${show.dcas.length}/${show.muteGroups.length})`;
+                : t === "groups"
+                  ? `DCA·뮤트 (${show.dcas.length}/${show.muteGroups.length})`
+                  : `패치 (박스 ${show.stageBoxes.length})`;
           const n = issueCount(t);
           return (
             <button
@@ -163,6 +196,8 @@ export default function ShowView({ id }: { id: string }) {
         </label>
       </div>
 
+      <IssuesPanel issues={allIssues} blocking={doc.errors.length > 0} onGo={goTo} />
+
       <section className="mb-8">
         {tab === "inputs" && (
           <InputGrid
@@ -175,30 +210,41 @@ export default function ShowView({ id }: { id: string }) {
             onMessage={onMessage}
             library={lib.library}
             updateLibrary={lib.update}
+            focusRequest={req("inputs") as { row: number; col: ColKey; n: number } | null}
           />
         )}
         {tab === "outputs" && (
-          <OutputsView show={show} apply={doc.apply} undo={doc.undo} redo={doc.redo} renumber={renumber} issues={allIssues} onMessage={onMessage} />
+          <OutputsView
+            show={show}
+            apply={doc.apply}
+            undo={doc.undo}
+            redo={doc.redo}
+            renumber={renumber}
+            issues={allIssues}
+            onMessage={onMessage}
+            focusRequest={req("outputs") as { kind: BusKind; row: number; col: string; n: number } | null}
+          />
         )}
         {tab === "groups" && (
-          <GroupsView show={show} apply={doc.apply} undo={doc.undo} redo={doc.redo} renumber={renumber} issues={allIssues} onMessage={onMessage} />
+          <GroupsView
+            show={show}
+            apply={doc.apply}
+            undo={doc.undo}
+            redo={doc.redo}
+            renumber={renumber}
+            issues={allIssues}
+            onMessage={onMessage}
+            focusRequest={req("groups") as { kind: GroupKind; row: number; col: string; n: number } | null}
+          />
+        )}
+        {tab === "patch" && (
+          <PatchView show={show} apply={doc.apply} undo={doc.undo} redo={doc.redo} issues={allIssues} onMessage={onMessage} focusRequest={req("patch")} />
         )}
         {lib.error && <p className="mt-2 text-xs text-red-600 whitespace-pre-wrap">내 라이브러리: {lib.error}</p>}
 
-        {(message || tabIssues.length > 0) && (
+        {message && (
           <div className="mt-2 space-y-2 text-xs">
-            {tabIssues.length > 0 && (
-              <div className="rounded border border-red-400 bg-red-50 px-3 py-2 text-red-800 dark:bg-red-950 dark:text-red-200">
-                확인할 항목 {tabIssues.length}건 — 빨간 셀에 마우스를 올리면 이유가 보입니다
-                {doc.errors.length > 0 ? " (고치기 전에는 저장되지 않음)" : " (저장은 됨)"}
-                <ul className="mt-1 list-disc pl-5">
-                  {tabIssues.slice(0, 5).map((i, k) => (
-                    <li key={k}>{i.message}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {message && (
+            {(
               <div role="status" className="rounded border border-neutral-300 bg-neutral-50 px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900">
                 <div className="flex justify-between gap-4">
                   <span>{message.text}</span>
@@ -217,14 +263,11 @@ export default function ShowView({ id }: { id: string }) {
             )}
           </div>
         )}
-        {otherIssues.length > 0 && (
-          <p className="mt-2 text-xs text-red-600">기타 검증 오류: {otherIssues.map((i) => i.message).join(" / ")}</p>
-        )}
 
         <details className="mt-3 text-xs text-neutral-500">
           <summary className="cursor-pointer">키보드 단축키</summary>
           <ul className="mt-2 grid gap-x-8 gap-y-1 sm:grid-cols-2">
-            <li><kbd>⌥/Alt</kbd>+<kbd>1</kbd>·<kbd>2</kbd>·<kbd>3</kbd> 인풋·아웃풋·DCA·뮤트 탭 전환</li>
+            <li><kbd>⌥/Alt</kbd>+<kbd>1</kbd>~<kbd>4</kbd> 인풋·아웃풋·DCA·뮤트·패치 탭 전환 · 오류 검사 항목을 누르면 그 칸으로 이동</li>
             <li><b>Ch·버스 번호 칸 클릭</b> 또는 그 열에서 <kbd>Space</kbd> → 눌러서 입력 (<kbd>↑↓</kbd> <kbd>Enter</kbd>, 글자로 검색)</li>
             <li>아웃풋·DCA 표: 맨 아래 행에서 <kbd>↓</kbd>, 맨 윗행에서 <kbd>↑</kbd>로 이웃 표로 이동 · DCA 멤버 칸에 “1-4, 7”</li>
             <li>M/S·Pre/Post 열: <kbd>Space</kbd>로 바꾸기, <kbd>S</kbd>/<kbd>M</kbd>, <kbd>P</kbd> 입력도 됨</li>

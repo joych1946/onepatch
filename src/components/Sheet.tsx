@@ -49,6 +49,8 @@ interface Props<T> {
   paused?: boolean;
   /** 선택 창이 따라가게 할 활성 행 (외부에서 지정) */
   activeRow?: number | null;
+  /** 이 칸으로 이동하고 포커스 (오류 검사 패널에서 클릭). n이 바뀔 때마다 */
+  focusRequest?: { row: number; col: string; n: number } | null;
 }
 
 export default function Sheet<T>({
@@ -70,6 +72,7 @@ export default function Sheet<T>({
   autoFocus,
   paused,
   activeRow,
+  focusRequest,
 }: Props<T>) {
   const n = rows.length;
   const rowCount = n + 1;
@@ -111,6 +114,22 @@ export default function Sheet<T>({
     inputRef.current?.focus({ preventScroll: true });
     activeCellRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [a.r, a.c, n, paused]);
+
+  useEffect(() => {
+    if (!focusRequest) return;
+    const c = columns.findIndex((col) => col.key === focusRequest.col);
+    const p = { r: focusRequest.row, c: c >= 0 ? c : 0 };
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setActive(p);
+    setAnchor(p);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    wantFocus.current = true;
+    requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true });
+      activeCellRef.current?.scrollIntoView({ block: "center", inline: "nearest" });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRequest?.n]);
 
   /* ───────── 변경 ───────── */
 
@@ -188,7 +207,7 @@ export default function Sheet<T>({
         (x, r) =>
           range(sel.c0, sel.c1).reduce((y, c) => {
             const col = columns[c];
-            return col.noClear || col.toggle ? y : (col.set(y, r, "") ?? y);
+            return col.noClear || col.toggle || col.readOnly ? y : (col.set(y, r, "") ?? y);
           }, x),
         s,
       ),
@@ -400,6 +419,7 @@ export default function Sheet<T>({
       case "F2":
         handled();
         if (e.key === "Enter" && tabStart !== null) downAfterEnter(e.shiftKey);
+        else if (col.readOnly) return;
         else if (col.toggle) toggleSelection();
         else {
           const row = rows[a.r];
@@ -438,6 +458,7 @@ export default function Sheet<T>({
   const onInputChange = (value: string) => {
     if (edit) return setEdit({ ...edit, text: value, sug: -1 });
     const col = columns[a.c];
+    if (col.readOnly) return;
     if (col.toggle) {
       // 체크형 열에서 바로 친 글자: 열이 알아듣는 값(s/m, p 등)이면 그대로 적용
       const v = value.trim();
@@ -504,6 +525,7 @@ export default function Sheet<T>({
                         focusGrid();
                       }}
                       onDoubleClick={() => {
+                        if (col.readOnly) return;
                         if (col.toggle) return toggleSelection();
                         setEdit({ mode: "edit", text: row ? (col.editText ?? col.text)(show, row) : "", sug: -1 });
                       }}

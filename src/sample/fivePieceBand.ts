@@ -1,5 +1,5 @@
 /**
- * 샘플: 5인조 밴드 (드럼, 베이스, 기타+보컬, 키보드+보컬, 메인 보컬)
+ * 샘플: 5인조 밴드 (드럼, 베이스, 기타+보컬, 키보드+보컬, 메인 보컬) — 26채널, 오류 검사 경고 0개
  * CL5 + Rio3224(하수) + Rio1608(상수, 키보드 쪽 서브스네이크) 기준.
  */
 import { newId } from "@/model/factory";
@@ -75,17 +75,19 @@ const rows: Row[] = [
   [12, "Bass Amp", "Bass Mic", "Bass", "mic-md421", sl(12), "orange", DCA.bass, MG.band],
   [13, "Electric Guitar", "E.Gtr", "Gt./Vo.", "mic-sm57", sl(13), "yellow", DCA.gtr, MG.band, { stand: "", notes: "앰프 그릴에 걸기" }],
   [14, "Electric Guitar 2", "E.Gtr 2", "Gt./Vo.", "mic-e906", sl(14), "yellow", DCA.gtr, MG.band],
-  [15, "Acoustic Guitar", "Ac.Gtr", "Gt./Vo.", "mic-j48", sl(15), "yellow", DCA.gtr, MG.band],
-  [16, "Keys 1 L", "Keys L", "Keys/Vo.", "mic-prod2", sr(1), "green", DCA.keys, MG.band, { stereoLinkNext: true }],
-  [17, "Keys 1 R", "Keys R", "Keys/Vo.", "mic-prod2", sr(2), "green", DCA.keys, MG.band],
-  [18, "Synth L", "Syn L", "Keys/Vo.", "mic-prod2", sr(3), "green", DCA.keys, MG.band, { stereoLinkNext: true }],
-  [19, "Synth R", "Syn R", "Keys/Vo.", "mic-prod2", sr(4), "green", DCA.keys, MG.band],
-  [20, "Lead Vocal", "Lead Vo", "Vocal", "mic-ulxd-b58", sl(17), "cyan", DCA.vox, MG.vox, { notes: "무선 1 / 스페어 무선 2" }],
-  [21, "Guitar Vocal", "Gt Vo", "Gt./Vo.", "mic-sm58", sl(18), "cyan", DCA.vox, MG.vox],
-  [22, "Keys Vocal", "Keys Vo", "Keys/Vo.", "mic-sm58", sr(5), "cyan", DCA.vox, MG.vox],
-  [23, "Bass Chorus", "Bass Vo", "Bass", "mic-sm58", sl(19), "cyan", DCA.vox, MG.vox],
-  [24, "MC", "MC", "MC", "mic-ulxd-b58", sl(20), "blue", DCA.vox, MG.mc, { notes: "무선 3" }],
-  [25, "Talkback", "TB", "FOH", "mic-sm58", local(1), "white", "", "", { stand: "데스크 스탠드" }],
+  [15, "Acoustic Guitar DI", "Ac.Gtr", "Gt./Vo.", "mic-j48", sl(15), "yellow", DCA.gtr, MG.band],
+  [16, "Acoustic Guitar Mic", "AcGtrMic", "Gt./Vo.", "mic-sm81", sl(16), "yellow", DCA.gtr, MG.band],
+  // 스테레오 링크는 홀수 채널에서 시작 (콘솔 대부분의 제약)
+  [17, "Keys 1 L", "Keys L", "Keys/Vo.", "mic-prod2", sr(1), "green", DCA.keys, MG.band, { stereoLinkNext: true }],
+  [18, "Keys 1 R", "Keys R", "Keys/Vo.", "mic-prod2", sr(2), "green", DCA.keys, MG.band],
+  [19, "Synth L", "Syn L", "Keys/Vo.", "mic-prod2", sr(3), "green", DCA.keys, MG.band, { stereoLinkNext: true }],
+  [20, "Synth R", "Syn R", "Keys/Vo.", "mic-prod2", sr(4), "green", DCA.keys, MG.band],
+  [21, "Lead Vocal", "Lead Vo", "Vocal", "mic-ulxd-b58", sl(17), "cyan", DCA.vox, MG.vox, { notes: "무선 1 / 스페어 무선 2" }],
+  [22, "Guitar Vocal", "Gt Vo", "Gt./Vo.", "mic-sm58", sl(18), "cyan", DCA.vox, MG.vox],
+  [23, "Keys Vocal", "Keys Vo", "Keys/Vo.", "mic-sm58", sr(5), "cyan", DCA.vox, MG.vox],
+  [24, "Bass Chorus", "Bass Vo", "Bass", "mic-sm58", sl(19), "cyan", DCA.vox, MG.vox],
+  [25, "MC", "MC", "MC", "mic-ulxd-b58", sl(20), "blue", DCA.vox, MG.mc, { notes: "무선 3" }],
+  [26, "Talkback", "TB", "FOH", "mic-sm58", local(1), "white", "", "", { stand: "데스크 스탠드" }],
 ];
 
 const inputs: InputChannel[] = rows.map(

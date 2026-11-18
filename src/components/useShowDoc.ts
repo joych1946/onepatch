@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Show } from "@/model/schema";
-import { checkShow, ShowSchema } from "@/model/schema";
+import { checkShow, ShowSchema, type IssueCode } from "@/model/schema";
 import { getShow, putShow } from "@/storage/showStore";
 
 const HISTORY_LIMIT = 300;
@@ -20,7 +20,7 @@ export type SaveStatus =
   | { kind: "invalid"; count: number }
   | { kind: "error"; message: string };
 
-export type ValidationIssue = { path: PropertyKey[]; message: string };
+export type ValidationIssue = { path: PropertyKey[]; message: string; code?: IssueCode };
 
 export function useShowDoc(id: string) {
   const [doc, setDoc] = useState<Doc | null | undefined>(undefined);
@@ -44,9 +44,12 @@ export function useShowDoc(id: string) {
   const { errors, warnings } = useMemo(() => {
     if (!present) return { errors: [] as ValidationIssue[], warnings: [] as ValidationIssue[] };
     const r = ShowSchema.safeParse(present);
+    const c = checkShow(present);
+    // 구조 오류(zod) + 점검 오류(코드 포함). 점검 오류는 superRefine으로도 들어오므로 custom은 빼고 합친다.
+    const structural = r.success ? [] : r.error.issues.filter((i) => i.code !== "custom").map((i) => ({ path: i.path, message: i.message }));
     return {
-      errors: r.success ? [] : r.error.issues.map((i) => ({ path: i.path, message: i.message })),
-      warnings: checkShow(present).warnings as ValidationIssue[],
+      errors: [...structural, ...c.errors] as ValidationIssue[],
+      warnings: c.warnings as ValidationIssue[],
     };
   }, [present]);
 

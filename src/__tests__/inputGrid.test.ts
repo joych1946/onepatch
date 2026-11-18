@@ -118,7 +118,7 @@ describe("행 조작", () => {
   it("자동 번호 켜짐: 삽입·삭제·이동 후 1..n", () => {
     let s = createSampleShow();
     s = insertAfter(s, 2, true);
-    expect(nums(s)).toEqual(Array.from({ length: 26 }, (_, i) => i + 1));
+    expect(nums(s)).toEqual(Array.from({ length: 27 }, (_, i) => i + 1));
     s = deleteRange(s, 0, 1, true);
     expect(nums(s)[0]).toBe(1);
     const src = s.inputs[5].source;
@@ -134,7 +134,7 @@ describe("행 조작", () => {
     expect(moved.inputs[3].number).toBe(1);
     s = duplicateRange(s, 0, 0, false);
     expect(s.inputs[1].source).toBe("Kick In");
-    expect(s.inputs[1].number).toBe(26);
+    expect(s.inputs[1].number).toBe(27);
     expect(s.inputs[1].id).not.toBe(s.inputs[0].id);
     expect(valid(s)).toEqual([]);
   });

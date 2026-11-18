@@ -27,9 +27,10 @@ interface Props {
   renumber: boolean;
   issues: ValidationIssue[];
   onMessage: (text: string, details?: string[]) => void;
+  focusRequest?: { kind: GroupKind; row: number; col: string; n: number } | null;
 }
 
-export default function GroupsView({ show, apply, undo, redo, renumber, issues, onMessage }: Props) {
+export default function GroupsView({ show, apply, undo, redo, renumber, issues, onMessage, focusRequest }: Props) {
   const [picker, setPicker] = useState<{ kind: GroupKind; row: number } | null>(null);
   const handles = useRef<Record<GroupKind, SheetHandle | null>>({ dca: null, mute: null });
 
@@ -81,6 +82,7 @@ export default function GroupsView({ show, apply, undo, redo, renumber, issues, 
               }}
               autoFocus={k === 0}
               paused={picker !== null}
+              focusRequest={focusRequest?.kind === kind ? focusRequest : null}
             />
           </section>
         );

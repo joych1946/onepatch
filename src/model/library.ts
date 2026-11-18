@@ -309,7 +309,7 @@ export function quantityIssues(lib: Library, show: Show): ShowIssue[] {
     if (!m || m.owned === null) return;
     const used = counts.get(m.id) ?? 0;
     if (used > m.owned)
-      issues.push({ path: ["inputs", i, "mic"], message: `${m.model}: 보유 ${m.owned}개인데 ${used}개 사용` });
+      issues.push({ path: ["inputs", i, "mic"], message: `${m.model}: 보유 ${m.owned}개인데 ${used}개 사용`, code: "mic-qty" });
   });
   return issues;
 }

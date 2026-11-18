@@ -9,7 +9,9 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Show } from "@/model/schema";
-import { COLUMNS, FIELD_TO_COL, type ColCtx, type Column } from "@/model/inputColumns";
+import { COLUMNS, COL_INDEX, FIELD_TO_COL, type ColCtx, type ColKey, type Column } from "@/model/inputColumns";
+import { autoPatch } from "@/model/patch";
+import { formatRanges } from "@/model/outputOps";
 import {
   appendChannel,
   deleteRange,
@@ -56,6 +58,8 @@ interface Props {
   /** 내 라이브러리 (불러오는 중이면 null) */
   library: Library | null;
   updateLibrary: (fn: (l: Library) => Library) => void;
+  /** 이 칸으로 이동 (오류 검사 패널에서 클릭). n이 바뀔 때마다 */
+  focusRequest?: { row: number; col: ColKey; n: number } | null;
 }
 
 export default function InputGrid({
@@ -68,6 +72,7 @@ export default function InputGrid({
   onMessage,
   library,
   updateLibrary,
+  focusRequest,
 }: Props) {
   const n = show.inputs.length;
   const rowCount = n + 1; // 마지막은 새 채널 입력용 빈 행
@@ -112,6 +117,21 @@ export default function InputGrid({
     inputRef.current?.focus({ preventScroll: true });
     activeCellRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [a.r, a.c, n, picker]);
+
+  useEffect(() => {
+    if (!focusRequest) return;
+    const p = { r: focusRequest.row, c: COL_INDEX[focusRequest.col] ?? 1 };
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setActive(p);
+    setAnchor(p);
+    setPicker(null);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    wantFocus.current = true;
+    requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true });
+      activeCellRef.current?.scrollIntoView({ block: "center", inline: "nearest" });
+    });
+  }, [focusRequest]);
 
   const openPicker = (r: number) => {
     if (!library) return onMessage("라이브러리를 불러오는 중입니다.");
@@ -587,6 +607,27 @@ export default function InputGrid({
           <option value="" disabled>DCA 해제…</option>
           {show.dcas.map((d) => (
             <option key={d.id} value={d.id}>{dcaLabel(d.id)}</option>
+          ))}
+        </select>
+        <select
+          className={tool}
+          value=""
+          disabled={!selRows.length || !show.stageBoxes.length}
+          title="선택한 채널을 박스의 빈 포트에 순서대로 배정"
+          onChange={(e) => {
+            const r = autoPatch(show, selRows, e.target.value);
+            if (r.show !== show) apply(() => r.show);
+            const box = show.stageBoxes.find((b) => b.id === e.target.value)?.name;
+            onMessage(
+              `${box}에 ${r.assigned}채널을 자동 패치했습니다.` +
+                (r.left.length ? ` 빈 포트가 모자라 Ch ${formatRanges(r.left)}은(는) 배정하지 못했습니다.` : ""),
+            );
+            focusGrid();
+          }}
+        >
+          <option value="" disabled>자동 패치…</option>
+          {show.stageBoxes.map((b) => (
+            <option key={b.id} value={b.id}>{b.name}의 빈 포트에</option>
           ))}
         </select>
         <span className="text-neutral-500">48V</span>

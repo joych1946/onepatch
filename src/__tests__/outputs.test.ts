@@ -141,12 +141,12 @@ describe("DCA·뮤트 그룹 ↔ 인풋 그리드", () => {
     const dcaCol = COLUMNS[COL_INDEX.dca];
     const members = groupColumns("dca")[2];
     expect(members.text(s, s.dcas[0])).toBe("1-10"); // Drums
-    s = members.set(s, 0, "1-4, 20")!;
-    expect(dcaCol.text(s, s.inputs[19])).toBe("5, 1"); // 20번 Lead Vocal: Vox(5) + Drums(1)
+    s = members.set(s, 0, "1-4, 21")!;
+    expect(dcaCol.text(s, s.inputs[20])).toBe("5, 1"); // 21번 Lead Vocal: Vox(5) + Drums(1)
     expect(dcaCol.text(s, s.inputs[5])).toBe(""); // 6번은 Drums에서 빠짐
     // 반대로 인풋 그리드에서 DCA를 넣으면 DCA 화면 멤버에 나타난다
     s = dcaCol.set(s, 5, "1")!;
-    expect(groupMembers(s, "dca", "dca-1")).toEqual([1, 2, 3, 4, 6, 20]);
+    expect(groupMembers(s, "dca", "dca-1")).toEqual([1, 2, 3, 4, 6, 21]);
     expect(ok(s)).toEqual([]);
   });
 
