@@ -18,6 +18,7 @@ import { BUILTIN_SHOW_TEMPLATES, showFromTemplate } from "@/model/templates";
 import type { Show } from "@/model/schema";
 import { useLibrary } from "./useLibrary";
 import ChoiceSheet from "./ChoiceSheet";
+import { applyShowInfo, EDIT_TITLE_KEY } from "@/model/showInfo";
 
 type Notice = { kind: "info" | "error"; text: string; details?: string[] };
 
@@ -29,6 +30,8 @@ export default function ShowList() {
   const fileRef = useRef<HTMLInputElement>(null);
   const { library } = useLibrary();
   const [tplOpen, setTplOpen] = useState(false);
+  /** 이름 바꾸는 중인 Show id */
+  const [renaming, setRenaming] = useState<string | null>(null);
 
   const refresh = useCallback(async (selectId?: string) => {
     const list = await listShows();
@@ -50,7 +53,17 @@ export default function ShowList() {
       const show = createEmptyShow();
       await putShow(show);
       await refresh(show.id);
-      setNotice({ kind: "info", text: "새 Show를 만들었습니다." });
+      setNotice({ kind: "info", text: "새 Show를 만들었습니다. 공연명을 입력하고 Enter를 누르세요." });
+      setRenaming(show.id);
+    },
+    rename: async (id: string, title: string) => {
+      const show = await getShow(id);
+      if (!show) return;
+      const next = applyShowInfo(show, { title });
+      if (next === show) return;
+      await putShow({ ...next, updatedAt: new Date().toISOString() });
+      await refresh(id);
+      setNotice({ kind: "info", text: `이름을 “${next.title}”(으)로 바꿨습니다.` });
     },
     addSample: async () => {
       const show = createSampleShow();
@@ -62,6 +75,9 @@ export default function ShowList() {
     /** 템플릿으로 만들고 바로 연다 */
     fromTemplate: async (show: Show) => {
       await putShow(show);
+      try {
+        sessionStorage.setItem(EDIT_TITLE_KEY, show.id);
+      } catch {}
       router.push(`/shows/${show.id}`);
     },
     duplicate: async (id: string) => {
@@ -111,7 +127,7 @@ export default function ShowList() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (tplOpen || isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (tplOpen || renaming || isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       const n = shows?.length ?? 0;
       switch (e.key) {
         case "ArrowDown":
@@ -130,6 +146,9 @@ export default function ShowList() {
           break;
         case "d":
           if (current) run(actions.duplicate(current.id));
+          break;
+        case "F2":
+          if (current) setRenaming(current.id);
           break;
         case "Delete":
         case "Backspace":
@@ -243,7 +262,19 @@ export default function ShowList() {
                   i === selected ? "bg-blue-50 dark:bg-blue-950" : ""
                 }`}
               >
-                <td className="py-2 pr-3 font-medium">{s.title}</td>
+                <td className="py-2 pr-3 font-medium">
+                  {renaming === s.id ? (
+                    <RenameInput
+                      initial={s.title}
+                      onDone={(t) => {
+                        setRenaming(null);
+                        if (t !== null) run(actions.rename(s.id, t));
+                      }}
+                    />
+                  ) : (
+                    s.title
+                  )}
+                </td>
                 <td className="py-2 pr-3 tabular-nums">{s.date || "—"}</td>
                 <td className="py-2 pr-3">{s.venue || "—"}</td>
                 <td className="py-2 pr-3">{s.version}</td>
@@ -259,6 +290,9 @@ export default function ShowList() {
                 <td className="py-2 text-right whitespace-nowrap">
                   <button className="px-1.5 hover:underline" onClick={() => actions.open(s.id)}>
                     열기
+                  </button>
+                  <button className="px-1.5 hover:underline" onClick={() => setRenaming(s.id)} title="F2">
+                    이름 바꾸기
                   </button>
                   <button
                     className="px-1.5 hover:underline"
@@ -281,7 +315,7 @@ export default function ShowList() {
 
       <p className="mt-6 text-xs text-neutral-500">
         <kbd>↑</kbd>
-        <kbd>↓</kbd> 선택 · <kbd>Enter</kbd> 열기 · <kbd>D</kbd> 복제 · <kbd>Delete</kbd> 삭제
+        <kbd>↓</kbd> 선택 · <kbd>Enter</kbd> 열기 · <kbd>F2</kbd> 이름 바꾸기 · <kbd>D</kbd> 복제 · <kbd>Delete</kbd> 삭제
         · <kbd>N</kbd> 새 Show · <kbd>T</kbd> 템플릿으로 새 Show · <kbd>I</kbd> 가져오기 — 데이터는 이 브라우저에만 저장됩니다.
       </p>
 
@@ -318,5 +352,53 @@ export default function ShowList() {
         />
       )}
     </main>
+  );
+}
+
+/** 목록에서 이름 바꾸기: Enter 확정 · Esc 취소 · 빈 이름은 받지 않음 (onDone(null) = 취소) */
+function RenameInput({ initial, onDone }: { initial: string; onDone: (title: string | null) => void }) {
+  const [draft, setDraft] = useState(initial);
+  const [error, setError] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+  const done = useRef(false);
+  useEffect(() => {
+    ref.current?.focus();
+    ref.current?.select();
+  }, []);
+  const finish = (t: string | null) => {
+    if (done.current) return;
+    done.current = true;
+    onDone(t);
+  };
+  return (
+    <span className="inline-flex flex-col">
+      <input
+        ref={ref}
+        value={draft}
+        aria-label="공연명"
+        aria-invalid={error}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          setError(false);
+        }}
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === "Enter") {
+            e.preventDefault();
+            if (draft.trim()) finish(draft.trim());
+            else setError(true);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            finish(null);
+          }
+        }}
+        onBlur={() => finish(draft.trim() || null)}
+        className={`w-full min-w-[16ch] rounded border bg-transparent px-1 outline-none focus:ring-2 ${error ? "border-red-500 focus:ring-red-500" : "border-neutral-300 focus:ring-blue-600 dark:border-neutral-700"}`}
+      />
+      {error && <span className="text-xs font-normal text-red-600">공연명은 비워 둘 수 없습니다.</span>}
+    </span>
   );
 }

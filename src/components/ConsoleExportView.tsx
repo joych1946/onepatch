@@ -6,12 +6,15 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Show } from "@/model/schema";
 import { getShow } from "@/storage/showStore";
 import { buildDm7File, Dm7FormatError, parseDm7File, type Dm7File } from "@/export/dm7/container";
 import { applyDm7, defaultDm7Options, DM7_COLOR, DM7_ITEMS, planDm7, type Dm7Options, type Dm7Plan } from "@/export/dm7/dm7Export";
 import { COLOR_LABEL } from "@/model/labels";
-import { downloadBlob } from "@/lib/download";
+import { downloadBlob, isTypingTarget } from "@/lib/download";
+import { dm7FileName } from "@/export/dm7/fileName";
+import { showDocumentTitle } from "@/model/showInfo";
 
 const KEY = (id: string) => `onepatch.dm7.${id}`;
 
@@ -20,6 +23,28 @@ export default function ConsoleExportView({ id }: { id: string }) {
   const [file, setFile] = useState<{ name: string; data: Dm7File } | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [opts, setOpts] = useState<Dm7Options | null>(null);
+
+  const router = useRouter();
+  // Esc: Show 화면으로 돌아가기 (입력 칸에서는 동작하지 않음)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      e.preventDefault();
+      router.push(`/shows/${id}`);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [router, id]);
+
+  const title = show?.title;
+  useEffect(() => {
+    if (title === undefined) return;
+    const prev = document.title;
+    document.title = showDocumentTitle({ title }, "콘솔 내보내기");
+    return () => {
+      document.title = prev;
+    };
+  }, [title]);
 
   useEffect(() => {
     getShow(id).then((s) => {
@@ -73,12 +98,9 @@ export default function ConsoleExportView({ id }: { id: string }) {
   };
 
   const download = () => {
-    if (!file || !result || !("plan" in result)) return;
+    if (!show || !file || !result || !("plan" in result)) return;
     const bytes = buildDm7File(applyDm7(file.data, result.plan));
-    const m = file.name.match(/^(.*?)(\.dm7f)?(\.dmxf|\.dm7f)$/i);
-    const base = m ? m[1] : file.name;
-    const ext = m ? m[3] : ".dmxf";
-    downloadBlob(`${base}_OnePatch${ext}`, new Blob([bytes as BlobPart], { type: "application/octet-stream" }));
+    downloadBlob(dm7FileName(show, file.name), new Blob([bytes as BlobPart], { type: "application/octet-stream" }));
   };
 
   if (show === null)
@@ -116,7 +138,7 @@ export default function ConsoleExportView({ id }: { id: string }) {
     <main className="mx-auto w-full max-w-[1000px] space-y-5 p-4 text-sm sm:p-6">
       <header>
         <Link href={`/shows/${show.id}`} className="text-neutral-500 hover:underline">
-          ← {show.title}
+          ← {show.title} <kbd>Esc</kbd>
         </Link>
         <h1 className="mt-1 text-2xl font-bold">콘솔 내보내기 — Yamaha DM7</h1>
         <p className="text-neutral-500">
@@ -278,7 +300,9 @@ export default function ConsoleExportView({ id }: { id: string }) {
               >
                 바꾼 파일 내려받기
               </button>
-              <span className="text-xs text-neutral-500">원본 파일은 바뀌지 않습니다.</span>
+              <span className="text-xs text-neutral-500">
+                → <b className="font-medium">{show && file ? dm7FileName(show, file.name) : ""}</b> · 원본 파일은 바뀌지 않습니다.
+              </span>
             </div>
             <p className="mt-3 rounded border border-neutral-300 bg-neutral-50 px-3 py-2 text-xs dark:border-neutral-700 dark:bg-neutral-900">
               ⚠️ DM7 쇼 파일 형식은 Yamaha가 공개하지 않았습니다(OnePatch가 DM Editor 저장 파일을 비교해 맞춘 방식). 콘솔에 넣기 전에 반드시{" "}

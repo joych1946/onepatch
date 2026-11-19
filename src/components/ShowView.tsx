@@ -22,6 +22,8 @@ import type { BusKind, InputChannel } from "@/model/schema";
 import { useShowDoc, type SaveStatus } from "./useShowDoc";
 import { useLibrary } from "./useLibrary";
 import { quantityIssues } from "@/model/library";
+import { applyShowInfo, EDIT_TITLE_KEY, showDocumentTitle, showInfoOf } from "@/model/showInfo";
+import { ShowInfoDialog, TitleEditor } from "./ShowInfo";
 
 const RENUMBER_KEY = "onepatch.renumber";
 const TAB_KEY = "onepatch.showTab";
@@ -42,6 +44,31 @@ export default function ShowView({ id }: { id: string }) {
   const [tab, setTabState] = useState<Tab>("inputs");
   const [focusReq, setFocusReq] = useState<FocusReq | null>(null);
   const [savingTpl, setSavingTpl] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const overlay = editingTitle || infoOpen || savingTpl;
+
+  // 새로 만든 Show면 공연명 입력 상태로 시작
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(EDIT_TITLE_KEY) === id) {
+        sessionStorage.removeItem(EDIT_TITLE_KEY);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setEditingTitle(true);
+      }
+    } catch {}
+  }, [id]);
+
+  // 브라우저 탭 제목
+  const title = show?.title;
+  useEffect(() => {
+    if (title === undefined) return;
+    const prev = document.title;
+    document.title = showDocumentTitle({ title });
+    return () => {
+      document.title = prev;
+    };
+  }, [title]);
 
   useEffect(() => {
     try {
@@ -75,7 +102,7 @@ export default function ShowView({ id }: { id: string }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const m = e.code.match(/^Digit([1-4])$/);
-      if (!m || !e.altKey || e.metaKey || e.ctrlKey) return;
+      if (!m || !e.altKey || e.metaKey || e.ctrlKey || overlay) return;
       e.preventDefault();
       setTab(TABS[Number(m[1]) - 1]);
     };
@@ -85,8 +112,20 @@ export default function ShowView({ id }: { id: string }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.defaultPrevented || overlay || isTypingTarget(e.target)) return;
+      // 그리드 밖(예: 공연명을 고친 직후)에서도 실행 취소/다시 실행. 그리드 안에서는 그리드가 먼저 처리한다.
+      if ((e.metaKey || e.ctrlKey) && !e.altKey) {
+        const k = e.key.toLowerCase();
+        if (k === "z" && !e.shiftKey) doc.undo();
+        else if ((k === "z" && e.shiftKey) || k === "y") doc.redo();
+        else return;
+        e.preventDefault();
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "Escape") router.push("/");
+      else if (e.key === "i") setInfoOpen(true);
+      else if (e.key === "F2") setEditingTitle(true);
       else if (e.key === "e") exportJson();
       else if (e.key === "p" && show) router.push(`/shows/${show.id}/print`);
       else return;
@@ -146,12 +185,25 @@ export default function ShowView({ id }: { id: string }) {
           <Link href="/" className="text-neutral-500 hover:underline">
             ← 목록
           </Link>
-          <h1 className="mt-1 text-2xl font-bold">{show.title}</h1>
-          <p className="text-neutral-500">
-            {[show.date, show.venue, show.author && `작성 ${show.author}`, show.version]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
+          <div className="mt-1 flex flex-wrap items-start gap-2">
+            <h1 className="text-2xl font-bold">
+              <TitleEditor
+                title={show.title}
+                editing={editingTitle}
+                setEditing={setEditingTitle}
+                onCommit={(t) => doc.apply((s) => applyShowInfo(s, { title: t }))}
+                className="px-1 -mx-1"
+              />
+            </h1>
+            {!editingTitle && (
+              <button className="mt-1 rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800" onClick={() => setInfoOpen(true)} title="공연명·날짜·장소·작성자·버전·메모 (I)">
+                공연 정보
+              </button>
+            )}
+          </div>
+          <button type="button" className="text-left text-neutral-500 hover:underline" onClick={() => setInfoOpen(true)} title="공연 정보 고치기 (I)">
+            {[show.date, show.venue, show.author && `작성 ${show.author}`, show.version].filter(Boolean).join(" · ") || "날짜·장소·작성자·버전 입력"}
+          </button>
         </div>
         <Link href="/library" className={`${btn} self-center`}>
           내 장비·소스
@@ -293,12 +345,24 @@ export default function ShowView({ id }: { id: string }) {
             <li><kbd>⌘/Ctrl</kbd>+<kbd>C</kbd>/<kbd>X</kbd>/<kbd>V</kbd> 복사·잘라내기·붙여넣기 (엑셀 호환, 헤더 자동 인식)</li>
             <li><kbd>⌘/Ctrl</kbd>+<kbd>Z</kbd> 실행 취소 · <kbd>⇧⌘Z</kbd>/<kbd>Ctrl</kbd>+<kbd>Y</kbd> 다시 실행</li>
             <li><kbd>⌥/Alt</kbd>+<kbd>N</kbd> 행 삽입 · <kbd>D</kbd> 복제 · <kbd>⌫</kbd> 삭제 · <kbd>↑↓</kbd> 순서 이동</li>
+            <li>공연명을 눌러 바로 고치기(그리드 밖에서 <kbd>F2</kbd>) · <kbd>Enter</kbd> 확정 · <kbd>Esc</kbd> 취소 · 그리드 밖에서 <kbd>I</kbd> 공연 정보</li>
             <li>그리드 밖에서 <kbd>E</kbd> JSON 내보내기 · <kbd>P</kbd> 출력·인쇄 · <kbd>Esc</kbd> 목록 (그리드에서 <kbd>Esc</kbd>로 빠져나옴)</li>
           </ul>
         </details>
       </section>
 
       <ReadonlySections show={show} />
+
+      {infoOpen && (
+        <ShowInfoDialog
+          info={showInfoOf(show)}
+          onSave={(info) => {
+            doc.apply((s) => applyShowInfo(s, info));
+            setInfoOpen(false);
+          }}
+          onClose={() => setInfoOpen(false)}
+        />
+      )}
 
       {savingTpl && (
         <SaveNameDialog

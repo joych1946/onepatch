@@ -36,5 +36,6 @@
 - 아웃풋·DCA·뮤트 표는 공통 키보드 그리드 `src/components/Sheet.tsx`에 열 정의(`src/model/outputColumns.ts`)를 넘겨 쓴다. 버스 이름 프리셋은 `src/model/busPresets.ts`.
 - 오류 검사는 `checkShow`(src/model/schema.ts, 종류 코드 `ISSUE_LABEL`) + 보유 수량 `quantityIssues`(src/model/library.ts). 샘플 Show는 경고 0개를 유지한다(테스트로 확인). 패치 계산은 `src/model/patch.ts`.
 - 템플릿: 기본 블록·Show 틀과 삽입 계산은 `src/model/templates.ts`, 내 템플릿은 내 라이브러리(`blockTemplates`, `showTemplates`)에 저장.
+- 공연 정보 편집: 계산은 `src/model/showInfo.ts`(빈 공연명·잘못된 날짜는 거부), 화면은 `src/components/ShowInfo.tsx`(제목 그 자리 편집 + 공연 정보 대화상자).
 - 출력물: 내용은 `src/model/reports.ts`, 인쇄 화면은 `/shows/[id]/print`(`src/components/print`). 쪽 나누기는 행 높이를 재서 직접 한다(미리보기 = 인쇄). 엑셀은 `src/lib/xlsx.ts`(fflate로 직접 작성).
 - 콘솔 내보내기(DM7): `src/export/dm7/`. 쇼 파일 위치는 항상 파일 안 스키마로 계산(`mbdf.ts`)하고 코드에 박지 않는다. 검증 샘플은 `~/Documents/vender/dm7`(저장소 밖, 없으면 테스트 건너뜀).

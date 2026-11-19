@@ -6,6 +6,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Show } from "@/model/schema";
 import { getShow } from "@/storage/showStore";
 import {
@@ -75,6 +76,7 @@ const SUMMARY_COLUMNS: ReportColumn[] = [
 ];
 
 export default function PrintView({ id }: { id: string }) {
+  const router = useRouter();
   const [show, setShow] = useState<Show | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const { library } = useLibrary();
@@ -113,7 +115,13 @@ export default function PrintView({ id }: { id: string }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.defaultPrevented || isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      // Esc: Show 화면으로 돌아가기 (Show 화면에서 P로 들어온 것의 반대)
+      if (e.key === "Escape") {
+        e.preventDefault();
+        router.push(`/shows/${id}`);
+        return;
+      }
       const n = parseInt(e.key, 10);
       if (n >= 1 && n <= DOCS.length) {
         e.preventDefault();
@@ -229,7 +237,7 @@ export default function PrintView({ id }: { id: string }) {
       <div className="no-print sticky top-0 z-10 space-y-2 border-b border-neutral-300 bg-white/95 p-3 text-sm backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/95">
         <div className="flex flex-wrap items-center gap-2">
           <Link href={`/shows/${show.id}`} className="text-neutral-500 hover:underline">
-            ← {show.title}
+            ← {show.title} <kbd>Esc</kbd>
           </Link>
           <span className="mx-1 h-4 w-px bg-neutral-300" />
           {DOCS.map((d, i) => (
