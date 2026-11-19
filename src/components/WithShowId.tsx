@@ -7,8 +7,9 @@ import ShowView from "./ShowView";
 import PrintView from "./print/PrintView";
 import ConsoleExportView from "./ConsoleExportView";
 import VersionsView from "./VersionsView";
+import ShareView from "./ShareView";
 
-export default function WithShowId({ view }: { view: "show" | "print" | "console" | "versions" }) {
+export default function WithShowId({ view }: { view: "show" | "print" | "console" | "versions" | "share" }) {
   const id = useSearchParams().get("id");
   if (!id)
     return (
@@ -19,5 +20,6 @@ export default function WithShowId({ view }: { view: "show" | "print" | "console
   if (view === "print") return <PrintView key={id} id={id} />;
   if (view === "console") return <ConsoleExportView key={id} id={id} />;
   if (view === "versions") return <VersionsView key={id} id={id} />;
+  if (view === "share") return <ShareView key={id} id={id} />;
   return <ShowView key={id} id={id} />;
 }

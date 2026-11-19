@@ -57,6 +57,8 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  // 서버 API(크루 공유 등)는 늘 네트워크로 — 오프라인 처리는 화면이 한다(마지막 받은 내용)
+  if (url.pathname.startsWith("/api/")) return;
 
   // 페이지 이동
   if (req.mode === "navigate") {

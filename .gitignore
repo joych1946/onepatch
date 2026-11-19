@@ -42,3 +42,6 @@ next-env.d.ts
 
 # 빌드 때 만드는 서비스 워커 (scripts/build-sw.mjs)
 /public/sw.js
+
+# 크루 공유 로컬 시험 저장소 (ONEPATCH_SHARE_DIR)
+/.shares

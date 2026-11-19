@@ -9,7 +9,10 @@ export const routes = {
   print: (id: string) => `/show/print?id=${encodeURIComponent(id)}`,
   console: (id: string) => `/show/console?id=${encodeURIComponent(id)}`,
   versions: (id: string) => `/show/versions?id=${encodeURIComponent(id)}`,
+  share: (id: string) => `/show/share?id=${encodeURIComponent(id)}`,
+  /** 크루 화면 (공유 id) — 짧게 */
+  crew: (shareId: string) => `/s?id=${encodeURIComponent(shareId)}`,
 };
 
 /** 오프라인용으로 미리 저장할 페이지 (쿼리 없이) */
-export const APP_PAGES = ["/", "/library", "/show", "/show/print", "/show/console", "/show/versions"];
+export const APP_PAGES = ["/", "/library", "/show", "/show/print", "/show/console", "/show/versions", "/show/share", "/s"];

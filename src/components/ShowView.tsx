@@ -229,6 +229,9 @@ export default function ShowView({ id }: { id: string }) {
         <Link href={routes.versions(show.id)} className={`${btn} self-center`} title="버전 목록·비교·변경분 인쇄·되돌리기">
           버전
         </Link>
+        <Link href={routes.share(show.id)} className={`${btn} self-center`} title="크루가 폰으로 보는 고정 링크·QR">
+          크루 공유
+        </Link>
         <Link href={routes.console(show.id)} className={`${btn} self-center`} title="DM Editor 쇼 파일(.dmxf)에 인풋 설정 넣기">
           콘솔 내보내기
         </Link>

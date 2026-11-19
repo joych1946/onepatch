@@ -43,5 +43,6 @@
 - 오프라인·새 버전: `scripts/sw.template.js` → 빌드 때 `scripts/build-sw.mjs`가 `public/sw.js` 생성(커밋하지 않음), 등록·안내는 `src/components/AppUpdate.tsx`(빌드한 앱에서만). 확인은 `npm run build && npx next start -p 3100`.
 - 전체 백업·복원(합치기/덮어쓰기)·백업 알림: `src/model/backup.ts`, `src/storage/backupStore.ts`, 화면 `src/components/DataCare.tsx`(영구 저장 요청·첫 사용 안내 포함).
 - 버전: 비교·이름 제안·기준 고르기는 `src/model/versions.ts`(인쇄용 행의 칸으로 비교, id → 번호로 짝짓기), 저장은 `src/storage/versionStore.ts`(IndexedDB `versions` 목록 + `versionData` 내용 — Show 열기는 버전을 읽지 않는다). 화면 `/show/versions`(`src/components/VersionsView.tsx`), 인쇄의 "변경분"·바뀐 행 ▲·머리말 버전 줄. 전체 백업에 포함.
+- 크루 공유: 내용 `src/model/share.ts`(인쇄용 행 + 지난 공유본과의 칸 단위 변경), 역할 `src/model/shareRoles.ts`, 서버 `src/app/api/share/route.ts` + `src/server/shareStore.ts`(Vercel Blob 비공개, 시험은 `ONEPATCH_SHARE_DIR`), 감독님 화면 `/show/share`, 크루 화면 `/s?id=`(`CrewView` — 가볍게, 모델 코드 안 가져옴). 링크·키는 IndexedDB `shares`, 전체 백업 포함.
 - 콘솔 읽기(DM7 → Show): `src/export/dm7/dm7Import.ts`(파일 → 스냅샷), `src/export/importShow.ts`(새 Show·콘솔 변경분, 기종 중립), 화면 `src/components/Dm7Import.tsx`(목록 "DM7 파일에서 새 Show", 콘솔 화면 6번).
 - 콘솔 내보내기(DM7): `src/export/dm7/`. 쇼 파일 위치는 항상 파일 안 스키마로 계산(`mbdf.ts`)하고 코드에 박지 않는다. 검증 샘플은 `~/Documents/vender/dm7`(저장소 밖, 없으면 테스트 건너뜀).

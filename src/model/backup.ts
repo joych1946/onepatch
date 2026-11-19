@@ -32,6 +32,16 @@ export interface AppData {
   consoleFiles: ConsoleFileData[];
   /** Show 버전 (11단계) */
   versions?: VersionData[];
+  /** 크루 공유 링크·업데이트 키 (12단계) */
+  shares?: ShareLinkData[];
+}
+
+export interface ShareLinkData {
+  showId: string;
+  id: string;
+  key: string;
+  publishedAt: string;
+  lastPublished: Show;
 }
 
 export type RestoreMode = "replace" | "merge";
@@ -60,6 +70,7 @@ export function backupToJson(data: AppData, createdAt = new Date().toISOString()
       library: data.library,
       consoleFiles: data.consoleFiles.map((f) => ({ key: f.key, name: f.name, uploadedAt: f.uploadedAt, data: toBase64(f.bytes) })),
       versions: data.versions ?? [],
+      shares: data.shares ?? [],
     },
     null,
     1,
@@ -81,6 +92,7 @@ const FileSchema = z.object({
   versions: z
     .array(z.object({ meta: z.object({ id: z.string(), showId: z.string(), name: z.string(), createdAt: z.string(), inputs: z.number(), outputs: z.number(), fp: z.string() }), show: z.unknown() }))
     .default([]),
+  shares: z.array(z.object({ showId: z.string(), id: z.string(), key: z.string(), publishedAt: z.string(), lastPublished: z.unknown() })).default([]),
 });
 
 export type ParsedBackup =
@@ -128,7 +140,13 @@ export function parseBackup(text: string): ParsedBackup {
     if (r.ok) versions.push({ meta: v.meta, show: r.show });
     else skipped.push(`버전 ${v.meta.name}: ${r.errors[0]}`);
   }
-  return { ok: true, data: { shows, library, consoleFiles, versions }, createdAt: f.data.createdAt, skipped };
+  const shares: ShareLinkData[] = [];
+  for (const s of f.data.shares) {
+    const r = parseShow(s.lastPublished);
+    if (r.ok) shares.push({ ...s, lastPublished: r.show });
+    else skipped.push(`공유 링크 ${s.id}: ${r.errors[0]}`);
+  }
+  return { ok: true, data: { shows, library, consoleFiles, versions, shares }, createdAt: f.data.createdAt, skipped };
 }
 
 /* ───────────── 가져오기 ───────────── */
@@ -154,7 +172,7 @@ export function restoreData(current: AppData, incoming: AppData, mode: RestoreMo
   if (mode === "replace") {
     const incIds = new Set(incoming.shows.map((s) => s.id));
     return {
-      data: { shows: incoming.shows, library: incoming.library ?? current.library, consoleFiles: incoming.consoleFiles, versions: incoming.versions ?? [] },
+      data: { shows: incoming.shows, library: incoming.library ?? current.library, consoleFiles: incoming.consoleFiles, versions: incoming.versions ?? [], shares: incoming.shares ?? [] },
       report: {
         showsAdded: incoming.shows.filter((s) => !current.shows.some((c) => c.id === s.id)).length,
         showsUpdated: incoming.shows.filter((s) => current.shows.some((c) => c.id === s.id)).length,
@@ -200,7 +218,14 @@ export function restoreData(current: AppData, incoming: AppData, mode: RestoreMo
   const vIds = new Set((current.versions ?? []).map((v) => v.meta.id));
   const versions = [...(current.versions ?? []), ...(incoming.versions ?? []).filter((v) => !vIds.has(v.meta.id))];
   return {
-    data: { shows: [...byId.values()], library, consoleFiles, versions },
+    data: {
+      shows: [...byId.values()],
+      library,
+      consoleFiles,
+      versions,
+      // 같은 Show의 공유는 지금 것을 둔다 (키가 다른 링크를 덮어쓰지 않게)
+      shares: [...(current.shares ?? []), ...(incoming.shares ?? []).filter((s) => !(current.shares ?? []).some((c) => c.showId === s.showId))],
+    },
     report: {
       showsAdded: added,
       showsUpdated: updated,
