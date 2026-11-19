@@ -22,7 +22,7 @@
 
 [내 환경]
 
-- 주력 콘솔: Yamaha DM7 Compact (콘솔 펌웨어 V2.1, DM Editor 2.x — 쇼 파일 `.dmxf`)
+- 주력 콘솔: Yamaha DM7 Compact (콘솔 펌웨어 V2.0, DM Editor 2.x — 쇼 파일 `.dmxf`)
   · 조사 결과: `docs/research/dm7.md`
 - 자주 쓰는 스테이지박스 구성: Rio3224(32in/16out) 1대 + Rio1608(16in/8out) 1대
 

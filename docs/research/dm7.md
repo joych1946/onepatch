@@ -131,7 +131,9 @@
 | OMNI n | `Processing/Omni/InputPort[n](7바이트)/HeadAmp(+1)/48V` 비트 |
 | Dante I/O(Rio 등) | `Mixing/DanteRemoteControl/IOUnit[u](0x480)/InputPort[p](9바이트)/HeadAmp/48V` 비트 |
 
-- Dante I/O의 `IOUnit u`가 실제 어느 장치인지는 ❓ (샘플에서는 Dante 1 = 유닛 1, 포트 1)
+- **`IOUnit[u]` = Rio의 UNIT ID** 🔬 — 콘솔에서 저장한 실기 샘플(Rio1608-D, UNIT ID #1)에서 Rio 1번 입력 48V가 `IOUnit[0]/InputPort[0]`(OnePatch "I/O 유닛 1", 포트 1)에 기록됨. DM Editor Dante I/O Device 화면의 칸 `#1`~`#24`와 같은 번호.
+  - UNIT ID 2 이상, Rio의 2번 이후 포트는 아직 샘플 없음 ❓ (스키마상 유닛 0x480, 포트 9바이트 간격)
+- 같은 `HeadAmp`의 `Gain`(2바이트, 부호 있음)은 0.01 dB 단위: −6 dB = `-600`, +30 dB = `3000` 🔬 (OnePatch는 쓰지 않음)
 - 페어를 맺을 때 Ch3 이름이 지워진 것은 Editor 동작인지 사용자 조작인지 ❓
 
 ### 4.4 아웃풋 패치 (샘플 `outpatch`: Mix 2 → Dante OUT 1 / `outpatch2`: Matrix 1 → OMNI OUT 1, Stereo L·R → OMNI OUT 2·3)
@@ -168,12 +170,17 @@
   - DM Editor 2.x: OnePatch가 쓴 파일이 열리고, 다시 저장해도 Current 데이터는 그대로 🔬. 셋업은 화면 상태 2바이트만 다름.
   - DM Editor에서 인풋(이름·컬러·패치·페어·DCA)·아웃풋 패치·버스·DCA·뮤트 이름이 기대값대로 표시됨 (사용자 확인)
   - **DM7 Compact 콘솔(FW V2.1)에서 USB로 불러오기 성공** (사용자 확인)
-  - 아직: 콘솔 화면의 항목별 확인, 한글 이름 표시, 실제 신호·48V 확인, Rio 연결 상태 샘플 (8-C)
+- **실기 검증 (8-C, 2026-11-19)** — DM7 Compact **FW V2.0**(앞서 V2.1로 적은 것을 사용자가 정정) + Rio1608-D 1대(UNIT ID #1)
+  - 불러오기: 성공, 오류 없음
+  - 인풋(이름·컬러·패치·48V·페어·DCA·뮤트), 아웃풋 패치, 버스·DCA·뮤트 이름: 모두 맞게 들어감 (사용자 확인)
+  - 한글 이름: 콘솔 화면에서 정상 표시
+  - Rio 신호: 정상 (사용자 확인). DM Editor 온라인 화면에서 Rio1608-D #1에 `+48V Active` 표시
+  - 다르게 들어간 항목: 없음 → 고칠 것 없음
+  - Rio 샘플(`rio_base`, `rio_48V_1`, `rio_48V_5`, `rio_gian`)로 유닛 번호 대응을 확인하고 테스트로 남김. `rio_48V_5`는 Rio 5번이 아니라 **OMNI 5** 48V가 켜져 있어 Rio 포트 간격 확인에는 쓰지 못함
 
 ## 6. 남은 확인 사항
 
-- Dante I/O의 유닛 번호와 실제 Rio 장치의 대응 (실제 Rio가 연결된 쇼 파일 필요)
+- Rio UNIT ID 2 이상의 유닛 번호, Rio 2번 이후 포트의 48V 위치 (Rio 2대 연결 샘플, Rio 5번 48V 샘플 필요)
 - Stereo B R의 출력 소스 번호
 - 파일 컬러 `LtGreen`/`White`와 OSC 컬러 `Cyan`/`Magenta`의 관계
-- 콘솔에서 한글 이름이 어떻게 보이는지 (Name Language 설정별)
 - 콘솔 V2.1이 V1의 `.dm7f`를 불러오는지

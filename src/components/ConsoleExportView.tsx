@@ -150,7 +150,7 @@ export default function ConsoleExportView({ id }: { id: string }) {
         <h2 className="mb-2 font-semibold">2. 스테이지박스 → DM7 입력</h2>
         <p className="mb-2 text-xs text-neutral-500">
           박스의 1번 포트가 DM7의 몇 번 Dante 입력으로 들어오는지 적습니다 (Dante Controller의 패치와 같게). 콘솔 로컬 포트(Local)는 OMNI로 들어갑니다.
-          48V는 Dante I/O 장치 쪽 설정이라 그 장치가 DM7에서 몇 번 I/O 유닛인지 알아야 합니다 — 모르면 비워 두세요(48V는 쓰지 않음).
+          48V는 Dante I/O 장치 쪽 설정이라 I/O 유닛 번호가 필요합니다 — Rio 앞면의 UNIT ID와 같은 번호입니다(DM7 Dante I/O Device 화면의 #번호). 비우면 48V는 쓰지 않습니다.
         </p>
         <table className="w-full max-w-xl border-collapse text-left">
           <thead className="text-xs text-neutral-500">
@@ -158,7 +158,7 @@ export default function ConsoleExportView({ id }: { id: string }) {
               <th className="py-1 pr-3 font-medium">박스</th>
               <th className="py-1 pr-3 font-medium">Dante 시작 번호</th>
               <th className="py-1 pr-3 font-medium">→ 범위</th>
-              <th className="py-1 pr-3 font-medium">48V용 I/O 유닛 (확인 필요)</th>
+              <th className="py-1 pr-3 font-medium">48V용 I/O 유닛 (= Rio UNIT ID)</th>
               <th className="py-1 font-medium">Dante OUT 시작 번호</th>
             </tr>
           </thead>

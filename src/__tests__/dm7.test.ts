@@ -213,3 +213,37 @@ describe.skipIf(!have || !existsSync(BUSNAME))("DM7 버스·DCA·뮤트 이름 (
     expect(plan.warnings.join("\n")).toMatch(/Lead Vo Wedge.*8자/);
   });
 });
+
+/* 8-C 실기 샘플: DM7 Compact FW V2.0 + Rio1608-D 1대(UNIT ID #1), 콘솔에서 저장 */
+const rioFile = (n: string) => join(DIR, `${n}.dmxf`);
+const haveRio = ["rio_base", "rio_48V_1", "rio_48V_5"].every((n) => existsSync(rioFile(n)));
+const loadRio = (n: string) => parseDm7File(new Uint8Array(readFileSync(rioFile(n))));
+const none: Record<Dm7Item, boolean> = { ...onlyOut, outPatch: false };
+
+describe.skipIf(!haveRio)("DM7 Rio 연결 샘플 (8-C, 샘플 필요)", () => {
+  function rioShow(local5 = false): Show {
+    const show = createEmptyShow();
+    const rio = show.stageBoxes[0].id;
+    const ch1: InputChannel = { ...newChannel(1), port: { kind: "stagebox", stageBoxId: rio, port: 1 }, phantom: true };
+    const ch2: InputChannel = { ...newChannel(2), port: { kind: "local", port: 5 }, phantom: true };
+    return { ...show, inputs: local5 ? [ch1, ch2] : [ch1] };
+  }
+
+  it("Rio UNIT ID #1 = I/O 유닛 1: 기본 설정으로 Ch1 → Dante 1 + Rio 1번 48V가 콘솔 저장 결과와 같다", () => {
+    const show = rioShow();
+    const opts = defaultDm7Options(show);
+    expect(opts.boxes[show.stageBoxes[0].id].ioUnit).toBe(1);
+    const plan = planDm7(show, loadRio("rio_base"), { ...opts, items: { ...none, patch: true, phantom: true } });
+    const expected = current(loadRio("rio_48V_1"));
+    expect(body(plan.current)).toEqual(body(expected));
+    const mixing = section(parseSections(expected), "Mixing");
+    const p = locate(mixing, ["DanteRemoteControl", ["IOUnit", 0], ["InputPort", 0], "HeadAmp", "48V"]);
+    expect(p.pos).toBe(0x49790);
+  });
+
+  it("OMNI 5 48V (rio_48V_5 샘플에서 함께 켜진 것)도 같은 자리에 쓴다", () => {
+    const show = rioShow(true);
+    const plan = planDm7(show, loadRio("rio_48V_1"), { ...defaultDm7Options(show), items: { ...none, phantom: true } });
+    expect(body(plan.current)).toEqual(body(current(loadRio("rio_48V_5"))));
+  });
+});
