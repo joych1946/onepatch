@@ -150,6 +150,7 @@ export function BackupBanner({ status, onBackup }: { status: BackupStatus | null
     status.removedShows ? `지운 Show ${status.removedShows}개` : "",
     status.libraryChanged ? "내 라이브러리·템플릿 변경" : "",
     status.consoleChanged ? "콘솔 기준 파일 변경" : "",
+    status.versionsChanged ? "버전 변경" : "",
   ].filter(Boolean);
   return (
     <div role="status" aria-label="백업 알림" className="mb-4 flex flex-wrap items-center gap-3 rounded border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">

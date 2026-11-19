@@ -24,12 +24,14 @@ import {
 import { buildShowXlsx, fileBase, toCsv } from "@/lib/showExport";
 import { consoleTasks, TASK_SECTIONS } from "@/export/dm7/tasks";
 import { DEFAULT_CONSOLE_PROFILE } from "@/export/profile";
+import { changedRowIds, contentFingerprint, currentVersion, defaultBase, DIFF_SECTIONS, diffShows, type VersionMeta } from "@/model/versions";
+import { getVersionShow, listVersions } from "@/storage/versionStore";
 import { downloadBlob, downloadText, isTypingTarget } from "@/lib/download";
 import { useLibrary } from "../useLibrary";
 import { PagedTable, type Orientation, type PagedItem } from "./Paged";
 import { CableLabels, PatchSheets, StripLabels } from "./Docs";
 
-type Doc = "inputs" | "outputs" | "patch" | "summary" | "cable" | "strip" | "tasks";
+type Doc = "inputs" | "outputs" | "patch" | "summary" | "cable" | "strip" | "tasks" | "changes";
 const DOCS: { id: Doc; name: string; orientation: Orientation }[] = [
   { id: "inputs", name: "인풋리스트", orientation: "landscape" },
   { id: "outputs", name: "아웃풋 리스트", orientation: "landscape" },
@@ -38,7 +40,17 @@ const DOCS: { id: Doc; name: string; orientation: Orientation }[] = [
   { id: "strip", name: "콘솔 스트립 라벨", orientation: "landscape" },
   { id: "cable", name: "멀티케이블 라벨", orientation: "portrait" },
   { id: "tasks", name: "콘솔 할 일", orientation: "portrait" },
+  { id: "changes", name: "변경분", orientation: "portrait" },
 ];
+
+const CHANGE_COLUMNS: ReportColumn[] = [
+  { key: "target", label: "대상", width: 24 },
+  { key: "kind", label: "구분", width: 7, align: "center" },
+  { key: "field", label: "칸", width: 11 },
+  { key: "before", label: "이전", width: 29 },
+  { key: "after", label: "이후", width: 29 },
+];
+const KIND_TEXT = { added: "추가", removed: "삭제", changed: "변경" } as const;
 
 const TASK_COLUMNS: ReportColumn[] = [
   { key: "check", label: "✓", width: 4, align: "center" },
@@ -60,6 +72,11 @@ type Settings = {
   cellMm: number;
   stripMm: number;
   zoom: number;
+  /** 변경분: 이전("auto" = 기준 버전) → 이후("current" = 지금) */
+  changesFrom: string;
+  changesTo: string;
+  /** 인풋·아웃풋 리스트의 바뀐 행 표시 기준 ("auto" | "none" | 버전 id) */
+  markBase: string;
 };
 
 const KEY = "onepatch.print";
@@ -76,6 +93,9 @@ const DEFAULTS: Settings = {
   cellMm: 30,
   stripMm: 16,
   zoom: 0.75,
+  changesFrom: "auto",
+  changesTo: "current",
+  markBase: "auto",
 };
 
 const SUMMARY_COLUMNS: ReportColumn[] = [
@@ -92,10 +112,13 @@ export default function PrintView({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
   const { library } = useLibrary();
   const [s, setS] = useState<Settings>(DEFAULTS);
+  const [versions, setVersions] = useState<VersionMeta[]>([]);
+  const [vShows, setVShows] = useState<Record<string, Show>>({});
   const [printedAt] = useState(() => new Date().toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" }));
 
   useEffect(() => {
     getShow(id).then(setShow, (e) => setError(String(e)));
+    listVersions(id).then(setVersions, () => setVersions([]));
     try {
       const saved = JSON.parse(localStorage.getItem(KEY) ?? "null");
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -147,11 +170,63 @@ export default function PrintView({ id }: { id: string }) {
   const outputCols = useMemo(() => OUTPUT_REPORT_COLUMNS.filter((c) => s.outputCols.includes(c.key)), [s.outputCols]);
   const labelSheet = s.labelSheet === "custom" ? s.custom : (LABEL_SHEETS.find((l) => l.id === s.labelSheet) ?? LABEL_SHEETS[0]);
 
-  const inputItems = useMemo<PagedItem[]>(() => (show ? inputReportRows(show).map((r) => ({ kind: "row", cells: r.cells, color: r.color })) : []), [show]);
-  const outputItems = useMemo<PagedItem[]>(
-    () => (show ? outputReportSections(show).flatMap((sec) => [{ kind: "section" as const, title: sec.title }, ...sec.rows.map((r) => ({ kind: "row" as const, cells: r.cells }))]) : []),
-    [show],
+  /* 버전: 머리말의 버전 줄, 바뀐 행 표시, 변경분 */
+  const fp = useMemo(() => (show ? contentFingerprint(show) : ""), [show]);
+  const resolveId = (v: string, auto: () => VersionMeta | null) => (v === "auto" ? (auto()?.id ?? null) : v === "none" || v === "current" ? v : versions.some((x) => x.id === v) ? v : null);
+  const markId = resolveId(s.markBase, () => defaultBase(versions, fp));
+  const fromId = resolveId(s.changesFrom, () => defaultBase(versions, fp));
+  const toId = s.changesTo === "current" || !versions.some((v) => v.id === s.changesTo) ? "current" : s.changesTo;
+  useEffect(() => {
+    for (const v of [markId, fromId, toId]) if (v && v !== "none" && v !== "current" && !vShows[v]) void getVersionShow(v).then((x) => setVShows((m) => ({ ...m, [v]: x })));
+  }, [markId, fromId, toId, vShows]);
+  const vName = (v: string | null) => {
+    if (v !== "current") return versions.find((x) => x.id === v)?.name ?? "—";
+    const same = currentVersion(versions, fp);
+    return same ? `${same.name} (지금)` : "지금";
+  };
+  const vDate = (v: VersionMeta) => new Date(v.createdAt).toLocaleDateString("ko-KR");
+  const marked = useMemo(() => (show && markId && markId !== "none" && vShows[markId] ? changedRowIds(diffShows(vShows[markId], show)) : null), [show, markId, vShows]);
+  const cur = currentVersion(versions, fp);
+  const versionNote = (withMarks: boolean) => {
+    if (!show || !versions.length) return undefined;
+    const head = cur ? `버전 ${cur.name} · ${vDate(cur)} 저장` : `버전 ${show.version || "—"} · 마지막 저장 “${versions[0].name}”(${vDate(versions[0])}) 이후 수정됨`;
+    return withMarks && marked ? `${head} · ▲ = “${vName(markId)}” 이후 바뀐 행 ${marked.size}개` : head;
+  };
+
+  const inputItems = useMemo<PagedItem[]>(
+    () => (show ? inputReportRows(show).map((r) => ({ kind: "row", cells: r.cells, color: r.color, mark: !!marked?.has(r.id!) })) : []),
+    [show, marked],
   );
+  const outputItems = useMemo<PagedItem[]>(
+    () =>
+      show
+        ? outputReportSections(show).flatMap((sec) => [{ kind: "section" as const, title: sec.title }, ...sec.rows.map((r) => ({ kind: "row" as const, cells: r.cells, mark: !!marked?.has(r.id!) }))])
+        : [],
+    [show, marked],
+  );
+  const changeDiff = useMemo(() => {
+    if (!show || !fromId || fromId === "none") return null;
+    const a = fromId === "current" ? show : vShows[fromId];
+    const b = toId === "current" ? show : vShows[toId];
+    return a && b ? diffShows(a, b) : null;
+  }, [show, fromId, toId, vShows]);
+  const changeItems = useMemo<PagedItem[]>(() => {
+    if (!changeDiff) return [];
+    const rows: PagedItem[] = [];
+    if (changeDiff.info.length) {
+      rows.push({ kind: "section", title: "공연 정보" });
+      for (const f of changeDiff.info) rows.push({ kind: "row", cells: { target: "", kind: "변경", field: f.field, before: f.before, after: f.after } });
+    }
+    for (const { key, title } of DIFF_SECTIONS) {
+      if (!changeDiff[key].length) continue;
+      rows.push({ kind: "section", title: `${title} (${changeDiff[key].length})` });
+      for (const r of changeDiff[key]) {
+        if (!r.fields.length) rows.push({ kind: "row", cells: { target: r.label, kind: KIND_TEXT[r.kind], field: "", before: "", after: "" } });
+        r.fields.forEach((f, i) => rows.push({ kind: "row", cells: { target: i === 0 ? r.label : "", kind: i === 0 ? KIND_TEXT[r.kind] : "", field: f.field, before: f.before, after: f.after } }));
+      }
+    }
+    return rows;
+  }, [changeDiff]);
   const taskItems = useMemo<PagedItem[]>(() => {
     if (!show) return [];
     const tasks = consoleTasks(show, DEFAULT_CONSOLE_PROFILE);
@@ -294,6 +369,47 @@ export default function PrintView({ id }: { id: string }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+          {(s.doc === "inputs" || s.doc === "outputs") && versions.length > 0 && (
+            <label className="flex items-center gap-1">
+              ▲ 바뀐 행 표시
+              <select className={ctl} value={s.markBase} onChange={(e) => set({ markBase: e.target.value })} aria-label="바뀐 행 표시 기준">
+                <option value="auto">자동 ({defaultBase(versions, fp)?.name ?? "없음"} 이후)</option>
+                <option value="none">표시 안 함</option>
+                {versions.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name} 이후
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {s.doc === "changes" && (
+            <>
+              <label className="flex items-center gap-1">
+                이전
+                <select className={ctl} value={s.changesFrom} onChange={(e) => set({ changesFrom: e.target.value })} aria-label="변경분 이전">
+                  <option value="auto">자동 ({defaultBase(versions, fp)?.name ?? "버전 없음"})</option>
+                  {versions.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-1">
+                이후
+                <select className={ctl} value={toId} onChange={(e) => set({ changesTo: e.target.value })} aria-label="변경분 이후">
+                  <option value="current">지금</option>
+                  {versions.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {!versions.length && <span className="text-neutral-500">저장한 버전이 없습니다. Show 화면의 “버전 저장”(V)으로 먼저 남기세요.</span>}
+            </>
+          )}
           {(s.doc === "inputs" || s.doc === "outputs") && (
             <>
               <label className="flex items-center gap-1">
@@ -363,16 +479,16 @@ export default function PrintView({ id }: { id: string }) {
           )}
         </div>
         <p className="text-[11px] text-neutral-500">
-          인쇄 창에서 대상 “PDF로 저장”, 배율 100%(기본), 여백 “없음” 또는 “기본”을 고르세요. 미리보기의 쪽 구성이 그대로 인쇄됩니다. 숫자 1~7로 출력물 전환.
+          인쇄 창에서 대상 “PDF로 저장”, 배율 100%(기본), 여백 “없음” 또는 “기본”을 고르세요. 미리보기의 쪽 구성이 그대로 인쇄됩니다. 숫자 1~8로 출력물 전환.
         </p>
       </div>
 
       <div className="print-root overflow-x-auto py-6" style={{ zoom: s.zoom }}>
         {s.doc === "inputs" && (
-          <PagedTable show={show} docName="인풋리스트" extra={`${show.inputs.length}ch`} orientation="landscape" columns={inputCols} items={inputItems} fontPt={s.fontPt} printedAt={printedAt} />
+          <PagedTable show={show} docName="인풋리스트" extra={`${show.inputs.length}ch`} orientation="landscape" columns={inputCols} items={inputItems} fontPt={s.fontPt} printedAt={printedAt} note={versionNote(true)} />
         )}
         {s.doc === "outputs" && (
-          <PagedTable show={show} docName="아웃풋 리스트" extra={`${show.outputs.length}개 버스`} orientation="landscape" columns={outputCols} items={outputItems} fontPt={s.fontPt} printedAt={printedAt} />
+          <PagedTable show={show} docName="아웃풋 리스트" extra={`${show.outputs.length}개 버스`} orientation="landscape" columns={outputCols} items={outputItems} fontPt={s.fontPt} printedAt={printedAt} note={versionNote(true)} />
         )}
         {s.doc === "patch" && <PatchSheets show={show} printedAt={printedAt} />}
         {s.doc === "summary" && (
@@ -390,6 +506,22 @@ export default function PrintView({ id }: { id: string }) {
         )}
         {s.doc === "strip" && <StripLabels show={show} perStrip={s.perStrip} cellMm={s.cellMm} heightMm={s.stripMm} printedAt={printedAt} />}
         {s.doc === "cable" && <CableLabels show={show} sheet={labelSheet} startAt={s.startAt} />}
+        {s.doc === "changes" &&
+          (changeDiff ? (
+            <PagedTable
+              show={show}
+              docName="변경분"
+              extra={`${vName(fromId)} → ${vName(toId)} · ${changeDiff.total}건`}
+              orientation="portrait"
+              columns={CHANGE_COLUMNS}
+              items={changeItems.length ? changeItems : [{ kind: "row", cells: { target: "바뀐 것이 없습니다." } }]}
+              fontPt={9}
+              printedAt={printedAt}
+              note={versionNote(false)}
+            />
+          ) : (
+            <p className="no-print p-6 text-center text-neutral-500">{versions.length ? "버전 내용을 읽는 중…" : "저장한 버전이 없습니다."}</p>
+          ))}
         {s.doc === "tasks" && (
           <PagedTable
             show={show}

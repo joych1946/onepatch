@@ -23,7 +23,8 @@ export interface ReportColumn {
 }
 
 export type Cell = string | number;
-export type ReportRow = { cells: Record<string, Cell>; color?: Color };
+/** id: 채널·버스 id (버전 비교와 바뀐 행 표시에 쓴다) */
+export type ReportRow = { cells: Record<string, Cell>; color?: Color; id?: string };
 
 /* ───────────── 인풋리스트 ───────────── */
 
@@ -53,6 +54,7 @@ export function inputReportRows(show: Show): ReportRow[] {
     return g ? (g.name ? `${g.number} ${g.name}` : String(g.number)) : "";
   };
   return show.inputs.map((c) => ({
+    id: c.id,
     color: c.color,
     cells: {
       ch: c.number,
@@ -89,6 +91,7 @@ const KIND_TITLE: Record<BusKind, string> = { aux: "Aux / Mix", matrix: "Matrix"
 
 export function outputReportSections(show: Show): { title: string; rows: ReportRow[] }[] {
   const row = (b: OutputBus): ReportRow => ({
+    id: b.id,
     cells: {
       bus: b.kind === "main" ? "Main" : busShort(b),
       name: b.name,

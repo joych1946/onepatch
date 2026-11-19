@@ -79,10 +79,15 @@ export function SaveNameDialog({
   initial,
   onSave,
   onClose,
+  label = "템플릿 이름",
+  selectAll = true,
 }: {
   title: string;
   description: string;
   initial: string;
+  label?: string;
+  /** false면 글자 끝에 커서 (제안 이름 뒤에 이어 쓰기) */
+  selectAll?: boolean;
   onSave: (name: string) => void;
   onClose: () => void;
 }) {
@@ -90,7 +95,10 @@ export function SaveNameDialog({
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     ref.current?.focus();
-    ref.current?.select();
+    if (selectAll) ref.current?.select();
+    else ref.current?.setSelectionRange(initial.length, initial.length);
+    // 열 때 한 번만
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const save = () => name.trim() && onSave(name.trim());
   return (
@@ -121,7 +129,7 @@ export function SaveNameDialog({
           ref={ref}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          aria-label="템플릿 이름"
+          aria-label={label}
           className="w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-blue-600 dark:border-neutral-700"
         />
         <div className="flex justify-end gap-2">

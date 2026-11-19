@@ -8,6 +8,7 @@ import { parseShow } from "./serialize";
 import { LibrarySchema, type Library } from "./library";
 import { upgradeLibrary } from "./libraryDefaults";
 import type { Show } from "./schema";
+import type { VersionMeta } from "./versions";
 
 export const BACKUP_FORMAT = "onepatch-backup";
 export const BACKUP_VERSION = 1;
@@ -19,11 +20,18 @@ export interface ConsoleFileData {
   bytes: Uint8Array;
 }
 
+export interface VersionData {
+  meta: VersionMeta;
+  show: Show;
+}
+
 /** 앱의 모든 데이터 */
 export interface AppData {
   shows: Show[];
   library: Library | null;
   consoleFiles: ConsoleFileData[];
+  /** Show 버전 (11단계) */
+  versions?: VersionData[];
 }
 
 export type RestoreMode = "replace" | "merge";
@@ -51,6 +59,7 @@ export function backupToJson(data: AppData, createdAt = new Date().toISOString()
       shows: data.shows,
       library: data.library,
       consoleFiles: data.consoleFiles.map((f) => ({ key: f.key, name: f.name, uploadedAt: f.uploadedAt, data: toBase64(f.bytes) })),
+      versions: data.versions ?? [],
     },
     null,
     1,
@@ -69,6 +78,9 @@ const FileSchema = z.object({
   shows: z.array(z.unknown()),
   library: z.unknown().nullable(),
   consoleFiles: z.array(z.object({ key: z.string(), name: z.string(), uploadedAt: z.string(), data: z.string() })).default([]),
+  versions: z
+    .array(z.object({ meta: z.object({ id: z.string(), showId: z.string(), name: z.string(), createdAt: z.string(), inputs: z.number(), outputs: z.number(), fp: z.string() }), show: z.unknown() }))
+    .default([]),
 });
 
 export type ParsedBackup =
@@ -110,7 +122,13 @@ export function parseBackup(text: string): ParsedBackup {
       skipped.push(`콘솔 기준 파일 ${c.name}: 읽을 수 없음`);
     }
   }
-  return { ok: true, data: { shows, library, consoleFiles }, createdAt: f.data.createdAt, skipped };
+  const versions: VersionData[] = [];
+  for (const v of f.data.versions) {
+    const r = parseShow(v.show);
+    if (r.ok) versions.push({ meta: v.meta, show: r.show });
+    else skipped.push(`버전 ${v.meta.name}: ${r.errors[0]}`);
+  }
+  return { ok: true, data: { shows, library, consoleFiles, versions }, createdAt: f.data.createdAt, skipped };
 }
 
 /* ───────────── 가져오기 ───────────── */
@@ -136,7 +154,7 @@ export function restoreData(current: AppData, incoming: AppData, mode: RestoreMo
   if (mode === "replace") {
     const incIds = new Set(incoming.shows.map((s) => s.id));
     return {
-      data: { shows: incoming.shows, library: incoming.library ?? current.library, consoleFiles: incoming.consoleFiles },
+      data: { shows: incoming.shows, library: incoming.library ?? current.library, consoleFiles: incoming.consoleFiles, versions: incoming.versions ?? [] },
       report: {
         showsAdded: incoming.shows.filter((s) => !current.shows.some((c) => c.id === s.id)).length,
         showsUpdated: incoming.shows.filter((s) => current.shows.some((c) => c.id === s.id)).length,
@@ -179,8 +197,10 @@ export function restoreData(current: AppData, incoming: AppData, mode: RestoreMo
   }
   const keys = new Set(current.consoleFiles.map((f) => f.key));
   const consoleFiles = [...current.consoleFiles, ...incoming.consoleFiles.filter((f) => !keys.has(f.key))];
+  const vIds = new Set((current.versions ?? []).map((v) => v.meta.id));
+  const versions = [...(current.versions ?? []), ...(incoming.versions ?? []).filter((v) => !vIds.has(v.meta.id))];
   return {
-    data: { shows: [...byId.values()], library, consoleFiles },
+    data: { shows: [...byId.values()], library, consoleFiles, versions },
     report: {
       showsAdded: added,
       showsUpdated: updated,
@@ -201,6 +221,8 @@ export interface BackupMark {
   shows: Record<string, string>;
   library: string;
   consoleFiles: string;
+  /** 버전 id 지문 (예전 표시에는 없음) */
+  versions?: string;
 }
 
 /** 짧은 지문 (FNV-1a) — 바뀌었는지만 본다 */
@@ -213,12 +235,16 @@ export function fingerprint(s: string): string {
   return (h >>> 0).toString(16);
 }
 
-export function markOf(data: { shows: Pick<Show, "id" | "updatedAt">[]; library: Library | null; consoleFiles: Pick<ConsoleFileData, "key" | "uploadedAt">[] }, at = new Date().toISOString()): BackupMark {
+export function markOf(
+  data: { shows: Pick<Show, "id" | "updatedAt">[]; library: Library | null; consoleFiles: Pick<ConsoleFileData, "key" | "uploadedAt">[]; versions?: { meta: Pick<VersionMeta, "id"> }[] },
+  at = new Date().toISOString(),
+): BackupMark {
   return {
     at,
     shows: Object.fromEntries(data.shows.map((s) => [s.id, s.updatedAt])),
     library: data.library ? fingerprint(JSON.stringify(data.library)) : "",
     consoleFiles: data.consoleFiles.map((f) => `${f.key}:${f.uploadedAt}`).sort().join(","),
+    versions: fingerprint((data.versions ?? []).map((v) => v.meta.id).sort().join(",")),
   };
 }
 
@@ -230,6 +256,7 @@ export interface BackupStatus {
   removedShows: number;
   libraryChanged: boolean;
   consoleChanged: boolean;
+  versionsChanged?: boolean;
   /** 알릴 만큼 쌓였는지 */
   due: boolean;
 }
@@ -243,5 +270,6 @@ export function backupStatus(mark: BackupMark | null, now: BackupMark): BackupSt
   const removedShows = Object.keys(mark.shows).filter((id) => !(id in now.shows)).length;
   const libraryChanged = mark.library !== now.library;
   const consoleChanged = mark.consoleFiles !== now.consoleFiles;
-  return { never: false, at: mark.at, changedShows, removedShows, libraryChanged, consoleChanged, due: changedShows + removedShows > 0 || libraryChanged || consoleChanged };
+  const versionsChanged = mark.versions !== undefined && mark.versions !== now.versions;
+  return { never: false, at: mark.at, changedShows, removedShows, libraryChanged, consoleChanged, versionsChanged, due: changedShows + removedShows > 0 || libraryChanged || consoleChanged || versionsChanged };
 }

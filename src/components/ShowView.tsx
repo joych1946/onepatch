@@ -25,6 +25,9 @@ import { useLibrary } from "./useLibrary";
 import { quantityIssues } from "@/model/library";
 import { applyShowInfo, EDIT_TITLE_KEY, showDocumentTitle, showInfoOf } from "@/model/showInfo";
 import { ShowInfoDialog, TitleEditor } from "./ShowInfo";
+import { saveNamedVersion } from "./VersionsView";
+import { listVersions } from "@/storage/versionStore";
+import { suggestVersionName } from "@/model/versions";
 
 const RENUMBER_KEY = "onepatch.renumber";
 const TAB_KEY = "onepatch.showTab";
@@ -47,7 +50,10 @@ export default function ShowView({ id }: { id: string }) {
   const [savingTpl, setSavingTpl] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
-  const overlay = editingTitle || infoOpen || savingTpl;
+  /** 버전 저장 대화상자 (열 때만 버전 목록을 읽어 이름을 제안) */
+  const [versionName, setVersionName] = useState<string | null>(null);
+  const overlay = editingTitle || infoOpen || savingTpl || versionName !== null;
+  const openSaveVersion = () => void listVersions(id).then((v) => setVersionName(suggestVersionName(v)), () => setVersionName("v1 "));
 
   // 새로 만든 Show면 공연명 입력 상태로 시작
   useEffect(() => {
@@ -126,6 +132,7 @@ export default function ShowView({ id }: { id: string }) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "Escape") router.push("/");
       else if (e.key === "i") setInfoOpen(true);
+      else if (e.key === "v") openSaveVersion();
       else if (e.key === "F2") setEditingTitle(true);
       else if (e.key === "e") exportJson();
       else if (e.key === "p" && show) router.push(routes.print(show.id));
@@ -216,6 +223,12 @@ export default function ShowView({ id }: { id: string }) {
         <button className={btn} onClick={doc.redo} disabled={!doc.canRedo} title="⇧⌘Z / Ctrl+Y">
           다시 실행
         </button>
+        <button className={btn} onClick={openSaveVersion} title="지금 상태를 이름 붙여 남기기 (V)">
+          버전 저장
+        </button>
+        <Link href={routes.versions(show.id)} className={`${btn} self-center`} title="버전 목록·비교·변경분 인쇄·되돌리기">
+          버전
+        </Link>
         <Link href={routes.console(show.id)} className={`${btn} self-center`} title="DM Editor 쇼 파일(.dmxf)에 인풋 설정 넣기">
           콘솔 내보내기
         </Link>
@@ -346,7 +359,7 @@ export default function ShowView({ id }: { id: string }) {
             <li><kbd>⌘/Ctrl</kbd>+<kbd>C</kbd>/<kbd>X</kbd>/<kbd>V</kbd> 복사·잘라내기·붙여넣기 (엑셀 호환, 헤더 자동 인식)</li>
             <li><kbd>⌘/Ctrl</kbd>+<kbd>Z</kbd> 실행 취소 · <kbd>⇧⌘Z</kbd>/<kbd>Ctrl</kbd>+<kbd>Y</kbd> 다시 실행</li>
             <li><kbd>⌥/Alt</kbd>+<kbd>N</kbd> 행 삽입 · <kbd>D</kbd> 복제 · <kbd>⌫</kbd> 삭제 · <kbd>↑↓</kbd> 순서 이동</li>
-            <li>공연명을 눌러 바로 고치기(그리드 밖에서 <kbd>F2</kbd>) · <kbd>Enter</kbd> 확정 · <kbd>Esc</kbd> 취소 · 그리드 밖에서 <kbd>I</kbd> 공연 정보</li>
+            <li>공연명을 눌러 바로 고치기(그리드 밖에서 <kbd>F2</kbd>) · <kbd>Enter</kbd> 확정 · <kbd>Esc</kbd> 취소 · 그리드 밖에서 <kbd>I</kbd> 공연 정보 · <kbd>V</kbd> 버전 저장</li>
             <li>그리드 밖에서 <kbd>E</kbd> JSON 내보내기 · <kbd>P</kbd> 출력·인쇄 · <kbd>Esc</kbd> 목록 (그리드에서 <kbd>Esc</kbd>로 빠져나옴)</li>
           </ul>
         </details>
@@ -362,6 +375,24 @@ export default function ShowView({ id }: { id: string }) {
             setInfoOpen(false);
           }}
           onClose={() => setInfoOpen(false)}
+        />
+      )}
+
+      {versionName !== null && (
+        <SaveNameDialog
+          title="버전 저장"
+          label="버전 이름"
+          selectAll={false}
+          description="지금 상태를 이름 붙여 남깁니다 (예: v1 사전 배포, v2 리허설 후). 이 이름이 Show의 버전 칸과 인쇄물 머리말에 들어갑니다. 비교·되돌리기는 “버전” 화면에서."
+          initial={versionName}
+          onSave={(name) => {
+            setVersionName(null);
+            void saveNamedVersion(show, name, doc.apply).then(
+              (m) => setMessage({ text: `버전 “${m.name}”을(를) 저장했습니다. “버전” 화면에서 이전 버전과 비교하거나 바뀐 것만 인쇄할 수 있습니다.` }),
+              (e) => setMessage({ text: `버전을 저장하지 못했습니다: ${String(e)}` }),
+            );
+          }}
+          onClose={() => setVersionName(null)}
         />
       )}
 

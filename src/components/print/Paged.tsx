@@ -27,13 +27,15 @@ export function Sheet({ orientation, children, className = "" }: { orientation: 
   );
 }
 
-export function PageHeader({ show, docName, extra }: { show: Show; docName: string; extra?: string }) {
-  const meta = [show.date, show.venue, show.version && `버전 ${show.version}`, show.author && `작성 ${show.author}`].filter(Boolean).join(" · ");
+/** note: 버전 줄 (버전 이름·저장 날짜, 바뀐 행 표시 기준) — 없으면 Show의 버전 칸 */
+export function PageHeader({ show, docName, extra, note }: { show: Show; docName: string; extra?: string; note?: string }) {
+  const meta = [show.date, show.venue, !note && show.version && `버전 ${show.version}`, show.author && `작성 ${show.author}`].filter(Boolean).join(" · ");
   return (
     <div className="mb-[2.5mm] flex items-end gap-[4mm] border-b-[0.5mm] border-black pb-[1.5mm]" data-m="header">
       <div className="min-w-0 flex-1">
         <div className="text-[14pt] leading-tight font-bold">{show.title}</div>
         <div className="text-[8.5pt] leading-tight text-neutral-700">{meta}</div>
+        {note && <div className="text-[8.5pt] leading-tight font-medium">{note}</div>}
       </div>
       <div className="text-right">
         <div className="text-[12pt] leading-tight font-bold">{docName}</div>
@@ -57,7 +59,7 @@ export function PageFooter({ page, pages, printedAt }: { page: number; pages: nu
 /* ───────────── 표 쪽 나누기 ───────────── */
 
 export type PagedItem =
-  | { kind: "row"; cells: Record<string, Cell>; color?: Color }
+  | { kind: "row"; cells: Record<string, Cell>; color?: Color; /** 이전 버전에서 바뀐 행 */ mark?: boolean }
   /** 구역 제목 (아웃풋의 Aux/Matrix/Main, 집계표의 항목) — 다음 행과 함께 다닌다 */
   | { kind: "section"; title: string }
   /** 구역 안의 머리글 (집계표처럼 구역마다 열 이름이 다를 때) */
@@ -94,10 +96,11 @@ function Rows({ items, columns }: { items: PagedItem[]; columns: ReportColumn[] 
             </tr>
           );
         return (
-          <tr key={i}>
+          <tr key={i} className={it.mark ? "changed" : undefined}>
             {columns.map((c, ci) => (
               <td key={c.key} style={{ textAlign: c.align ?? "left" }} className={ci === 0 ? "first" : undefined}>
                 {ci === 0 && it.color && it.color !== "none" && <span className="rowcolor" style={{ background: COLOR_SWATCH[it.color] }} />}
+                {ci === 0 && it.mark && <span className="mark">▲</span>}
                 {c.key === "color" ? <ColorChip color={it.color} /> : it.cells[c.key]}
               </td>
             ))}
@@ -148,6 +151,7 @@ export function PagedTable({
   fontPt,
   printedAt,
   showHead = true,
+  note,
 }: {
   show: Show;
   docName: string;
@@ -158,6 +162,7 @@ export function PagedTable({
   fontPt: number;
   printedAt: string;
   showHead?: boolean;
+  note?: string;
 }) {
   const measureRef = useRef<HTMLDivElement>(null);
   const [pages, setPages] = useState<PagedItem[][] | null>(null);
@@ -214,12 +219,12 @@ export function PagedTable({
     <>
       {/* 재기용 (보이지 않음) */}
       <div aria-hidden className="measure" style={{ width: `${w - 2 * MARGIN_MM}mm` }} ref={measureRef}>
-        <PageHeader show={show} docName={docName} extra={extra} />
+        <PageHeader show={show} docName={docName} extra={extra} note={note} />
         <Table columns={columns} items={items} fontPt={fontPt} showHead={showHead} />
       </div>
       {pages?.map((p, i) => (
         <Sheet key={i} orientation={orientation}>
-          <PageHeader show={show} docName={docName} extra={extra} />
+          <PageHeader show={show} docName={docName} extra={extra} note={note} />
           <Table columns={columns} items={p} fontPt={fontPt} showHead={showHead} />
           <PageFooter page={i + 1} pages={pages.length} printedAt={printedAt} />
         </Sheet>

@@ -8,7 +8,8 @@ export const routes = {
   show: (id: string) => `/show?id=${encodeURIComponent(id)}`,
   print: (id: string) => `/show/print?id=${encodeURIComponent(id)}`,
   console: (id: string) => `/show/console?id=${encodeURIComponent(id)}`,
+  versions: (id: string) => `/show/versions?id=${encodeURIComponent(id)}`,
 };
 
 /** 오프라인용으로 미리 저장할 페이지 (쿼리 없이) */
-export const APP_PAGES = ["/", "/library", "/show", "/show/print", "/show/console"];
+export const APP_PAGES = ["/", "/library", "/show", "/show/print", "/show/console", "/show/versions"];

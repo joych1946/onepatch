@@ -6,8 +6,9 @@ import { useSearchParams } from "next/navigation";
 import ShowView from "./ShowView";
 import PrintView from "./print/PrintView";
 import ConsoleExportView from "./ConsoleExportView";
+import VersionsView from "./VersionsView";
 
-export default function WithShowId({ view }: { view: "show" | "print" | "console" }) {
+export default function WithShowId({ view }: { view: "show" | "print" | "console" | "versions" }) {
   const id = useSearchParams().get("id");
   if (!id)
     return (
@@ -17,5 +18,6 @@ export default function WithShowId({ view }: { view: "show" | "print" | "console
     );
   if (view === "print") return <PrintView key={id} id={id} />;
   if (view === "console") return <ConsoleExportView key={id} id={id} />;
+  if (view === "versions") return <VersionsView key={id} id={id} />;
   return <ShowView key={id} id={id} />;
 }

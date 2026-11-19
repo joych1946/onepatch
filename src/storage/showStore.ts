@@ -5,6 +5,7 @@
 import { parseShow } from "@/model/serialize";
 import type { Show } from "@/model/schema";
 import { db, SHOWS as STORE } from "./db";
+import { deleteVersionsOf } from "./versionStore";
 
 export type ShowSummary = Pick<
   Show,
@@ -46,4 +47,5 @@ export async function putShow(show: Show): Promise<void> {
 
 export async function deleteShow(id: string): Promise<void> {
   await (await db()).delete(STORE, id);
+  await deleteVersionsOf(id); // 그 Show의 버전도 함께
 }
