@@ -1,8 +1,5 @@
 /** 저장하지 않고 Show에서 계산하는 값들 (같은 정보를 두 번 입력하지 않기 위해) */
-import { SHORT_NAME_LIMIT, type InputChannel, type Show } from "./schema";
-
-/** 기종 중립 화면 경고 기준. 실제 콘솔 제한은 내보내기 모듈이 따로 가진다. */
-export const SHORT_NAME_WARN_LENGTH = SHORT_NAME_LIMIT;
+import type { InputChannel, Show } from "./schema";
 
 export function micName(show: Show, ch: InputChannel): string {
   if (!ch.mic) return "";

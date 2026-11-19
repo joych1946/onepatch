@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import { blockData, buildDm7File, findBlock, parseDm7File, type Dm7File } from "@/export/dm7/container";
 import { locate, parseSections, section } from "@/export/dm7/mbdf";
 import { allocateBuses, applyDm7, defaultDm7Options, planDm7, type Dm7Item } from "@/export/dm7/dm7Export";
+import { exportChecks } from "@/export/checks";
 import { createSampleShow } from "@/sample/fivePieceBand";
 import { busAccess, rowOps, updateBus } from "@/model/outputOps";
 import { createEmptyShow } from "@/model/factory";
@@ -115,8 +116,11 @@ describe.skipIf(!have)("DM7 쇼 파일 (샘플 필요)", () => {
     expect(fields).toContain("3 페어: 단독 → 페어 L (3–4)");
     expect(fields).toContain("4 뮤트: — → 1");
     expect(fields).toContain("5 48V (OMNI 1): 꺼짐 → 켜짐");
-    expect(plan.warnings.join("\n")).toMatch(/8자/);
-    expect(plan.warnings.join("\n")).toMatch(/72채널/);
+    // 8자 넘는 이름은 내보내기 전 점검에서 잡고, 그대로 내보내면 자른다
+    expect(exportChecks(show, plan.profile).map((c) => (c.kind === "name" ? `${c.target} ${c.current} → ${c.suggestion}` : c.kind))).toEqual(
+      expect.arrayContaining(["Ch 1 KickInsideMic → KckInsdM"]),
+    );
+    expect(plan.notes.join("\n")).toMatch(/72채널/);
   });
 });
 
@@ -174,9 +178,9 @@ describe("DM7 버스 배정", () => {
     const warnings: string[] = [];
     const a = allocateBuses(createSampleShow(), (w) => warnings.push(w));
     expect(a.map((x) => `${x.bus.name}=${x.label}`)).toEqual([
-      "Lead Vo Wedge=Mix 1", "Gtr Wedge=Mix 2", "Bass Wedge=Mix 3", "Keys Wedge=Mix 4",
-      "Drum IEM=Mix 5/6", "Lead Vo IEM=Mix 7/8", "Side Fill=Mix 9/10", "FX1 Rev=Mix 11/12", "FX2 Dly=Mix 13/14",
-      "Front Fill=Matrix 1", "Delay=Matrix 3/4", "Rec=Matrix 5/6", "Main LR=Stereo A",
+      "Vo Wedge=Mix 1", "Gt Wedge=Mix 2", "Bs Wedge=Mix 3", "Ky Wedge=Mix 4",
+      "Drum IEM=Mix 5/6", "Vo IEM=Mix 7/8", "SideFill=Mix 9/10", "FX1 Rev=Mix 11/12", "FX2 Dly=Mix 13/14",
+      "Frt Fill=Matrix 1", "Delay=Matrix 3/4", "Rec=Matrix 5/6", "Main LR=Stereo A",
     ]);
     expect(warnings.join()).toMatch(/Bus Setup/);
   });
@@ -205,12 +209,13 @@ describe.skipIf(!have || !existsSync(BUSNAME))("DM7 버스·DCA·뮤트 이름 (
   });
 
   it("샘플 Show: 스테레오 버스는 두 Mix 모두, Main은 Stereo A L/R, 8자 넘으면 자르기", () => {
-    const show = createSampleShow();
+    const show = updateBus(createSampleShow(), "aux", 0, { name: "Lead Vo Wedge" });
     const items = { ...onlyOut, outPatch: false, busNames: true };
     const plan = planDm7(show, load("basic"), { ...defaultDm7Options(show), items });
     const names = plan.changes.map((c) => `${c.target}=${c.after}`);
     expect(names).toEqual(expect.arrayContaining(["Mix 1=Lead Vo", "Mix 5=Drum IEM", "Mix 6=Drum IEM", "Stereo A L=Main LR", "Stereo A R=Main LR", "DCA 1=Drums", "뮤트 그룹 1=Band"]));
-    expect(plan.warnings.join("\n")).toMatch(/Lead Vo Wedge.*8자/);
+    expect(plan.warnings).toEqual([]);
+    expect(exportChecks(show, plan.profile).find((c) => c.kind === "name")).toMatchObject({ target: "Aux 1", current: "Lead Vo Wedge" });
   });
 });
 

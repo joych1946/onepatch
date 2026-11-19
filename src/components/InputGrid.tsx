@@ -22,7 +22,10 @@ import {
   updateChannel,
 } from "@/model/inputOps";
 import { applyPaste, parseTsv, toTsv } from "@/model/inputPaste";
-import { phantomUnknown, resolvePhantom, SHORT_NAME_WARN_LENGTH } from "@/model/derive";
+import { phantomUnknown, resolvePhantom } from "@/model/derive";
+import { DEFAULT_CONSOLE_PROFILE } from "@/export/profile";
+
+const SHORT_NAME_WARN_LENGTH = DEFAULT_CONSOLE_PROFILE.nameMax;
 import type { Library } from "@/model/library";
 import PickFlow from "./PickFlow";
 import { BlockPicker, SaveNameDialog } from "./TemplateDialogs";
@@ -527,8 +530,8 @@ export default function InputGrid({
       case "shortName":
         return (
           <span
-            className={`font-mono ${ch.shortName.length > SHORT_NAME_WARN_LENGTH ? "text-amber-600" : ""}`}
-            title={ch.shortName.length > SHORT_NAME_WARN_LENGTH ? `${SHORT_NAME_WARN_LENGTH}자 초과 — 콘솔에서 잘릴 수 있음` : undefined}
+            className={`font-mono ${[...ch.shortName].length > SHORT_NAME_WARN_LENGTH ? "text-amber-600" : ""}`}
+            title={[...ch.shortName].length > SHORT_NAME_WARN_LENGTH ? `${SHORT_NAME_WARN_LENGTH}자 초과 — 콘솔에서 잘릴 수 있음` : undefined}
           >
             {ch.shortName}
           </span>

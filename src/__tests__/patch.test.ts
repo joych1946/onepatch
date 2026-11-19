@@ -57,7 +57,7 @@ describe("오류 검사", () => {
     expect(msgs).toContain("Ch 12–13 링크: 홀수 채널에서 시작해야 함");
     expect(msgs).toContain("“HiHatTopMic”: 짧은 이름 8자 초과");
     expect(msgs).toContain("Shure SM57: 보유 1개인데 3개 사용");
-    expect(msgs).toContain("Rio3224 1: Lead Vo Wedge, Gtr Wedge이(가) 같은 출력");
+    expect(msgs).toContain("Rio3224 1: Vo Wedge, Gt Wedge이(가) 같은 출력");
     // 모두 경고라 저장은 된다
     expect(parseShow(s).ok).toBe(true);
   });

@@ -205,8 +205,16 @@ export type IssueCode = keyof typeof ISSUE_LABEL;
 
 export type ShowIssue = { path: (string | number)[]; message: string; code?: IssueCode };
 
-/** 콘솔 표시용 짧은 이름의 기종 중립 글자 수 기준 (실제 콘솔 제한은 내보내기 모듈이 따로 가진다) */
+/**
+ * 짧은 이름 글자 수의 기본값. 실제 기준은 콘솔 프로필(src/export/profile.ts의 nameMax)을
+ * 화면에서 checkShow(show, { nameMax })로 넘겨 쓴다.
+ */
 export const SHORT_NAME_LIMIT = 8;
+
+export interface CheckOptions {
+  /** 짧은 이름 최대 글자 수 (콘솔 프로필) */
+  nameMax?: number;
+}
 
 /**
  * Show 점검. 두 단계로 나눈다.
@@ -214,7 +222,7 @@ export const SHORT_NAME_LIMIT = 8;
  * - warning: 포트 중복·범위 초과, 48V, 링크, 이름 길이 등 — 작업 중에 흔히 생기는 상태라
  *            저장은 하되 화면에 표시해서 고치게 한다
  */
-export function checkShow(show: z.infer<typeof ShowObjectSchema>): {
+export function checkShow(show: z.infer<typeof ShowObjectSchema>, opts: CheckOptions = {}): {
   errors: ShowIssue[];
   warnings: ShowIssue[];
 } {
@@ -222,6 +230,7 @@ export function checkShow(show: z.infer<typeof ShowObjectSchema>): {
   const warnings: ShowIssue[] = [];
   const err = (path: ShowIssue["path"], message: string, code: IssueCode = "ref") => errors.push({ path, message, code });
   const warn = (path: ShowIssue["path"], message: string, code: IssueCode) => warnings.push({ path, message, code });
+  const nameMax = opts.nameMax ?? SHORT_NAME_LIMIT;
 
   const dupCheck = <T>(
     items: T[],
@@ -314,8 +323,8 @@ export function checkShow(show: z.infer<typeof ShowObjectSchema>): {
       if (ch.number % 2 === 0)
         warn(at("stereoLinkNext"), `Ch ${ch.number}–${ch.number + 1} 링크: 홀수 채널에서 시작해야 함`, "link-odd");
     }
-    if ([...ch.shortName].length > SHORT_NAME_LIMIT)
-      warn(at("shortName"), `Ch ${ch.number} “${ch.shortName}”: 짧은 이름 ${SHORT_NAME_LIMIT}자 초과`, "short-name");
+    if ([...ch.shortName].length > nameMax)
+      warn(at("shortName"), `Ch ${ch.number} “${ch.shortName}”: 짧은 이름 ${nameMax}자 초과`, "short-name");
     ch.dcaIds.forEach((id, j) => {
       if (!dcaIds.has(id)) err(at("dcaIds", j), `없는 DCA: ${id}`);
     });

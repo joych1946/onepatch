@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Show } from "@/model/schema";
 import { checkShow, ShowSchema, type IssueCode } from "@/model/schema";
 import { getShow, putShow } from "@/storage/showStore";
+import { DEFAULT_CONSOLE_PROFILE } from "@/export/profile";
 
 const HISTORY_LIMIT = 300;
 
@@ -44,7 +45,7 @@ export function useShowDoc(id: string) {
   const { errors, warnings } = useMemo(() => {
     if (!present) return { errors: [] as ValidationIssue[], warnings: [] as ValidationIssue[] };
     const r = ShowSchema.safeParse(present);
-    const c = checkShow(present);
+    const c = checkShow(present, { nameMax: DEFAULT_CONSOLE_PROFILE.nameMax });
     // 구조 오류(zod) + 점검 오류(코드 포함). 점검 오류는 superRefine으로도 들어오므로 custom은 빼고 합친다.
     const structural = r.success ? [] : r.error.issues.filter((i) => i.code !== "custom").map((i) => ({ path: i.path, message: i.message }));
     return {

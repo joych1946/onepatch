@@ -133,16 +133,16 @@ const bus = (
 });
 
 const outputs: OutputBus[] = [
-  bus("aux", 1, "Lead Vo Wedge", "wedge", "mono", "pre", [sl(1)], "웨지 2통 데이지체인"),
-  bus("aux", 2, "Gtr Wedge", "wedge", "mono", "pre", [sl(2)]),
-  bus("aux", 3, "Bass Wedge", "wedge", "mono", "pre", [sl(3)]),
-  bus("aux", 4, "Keys Wedge", "wedge", "mono", "pre", [sr(1)]),
+  bus("aux", 1, "Vo Wedge", "wedge", "mono", "pre", [sl(1)], "웨지 2통 데이지체인"),
+  bus("aux", 2, "Gt Wedge", "wedge", "mono", "pre", [sl(2)]),
+  bus("aux", 3, "Bs Wedge", "wedge", "mono", "pre", [sl(3)]),
+  bus("aux", 4, "Ky Wedge", "wedge", "mono", "pre", [sr(1)]),
   bus("aux", 5, "Drum IEM", "iem", "stereo", "pre", [sl(5), sl(6)], "유선 IEM"),
-  bus("aux", 6, "Lead Vo IEM", "iem", "stereo", "pre", [sl(7), sl(8)], "PSM1000 ch.1"),
-  bus("aux", 7, "Side Fill", "sidefill", "stereo", "pre", [sl(9), sl(10)]),
+  bus("aux", 6, "Vo IEM", "iem", "stereo", "pre", [sl(7), sl(8)], "PSM1000 ch.1"),
+  bus("aux", 7, "SideFill", "sidefill", "stereo", "pre", [sl(9), sl(10)]),
   bus("aux", 8, "FX1 Rev", "fx", "stereo", "post", [], "내부 이펙트"),
   bus("aux", 9, "FX2 Dly", "fx", "stereo", "post", [], "내부 이펙트, 탭 템포"),
-  bus("matrix", 1, "Front Fill", "frontfill", "mono", "post", [sl(11)]),
+  bus("matrix", 1, "Frt Fill", "frontfill", "mono", "post", [sl(11)]),
   bus("matrix", 2, "Delay", "delay", "stereo", "post", [sl(12), sl(13)], "딜레이 타워 18m"),
   bus("matrix", 3, "Rec", "record", "stereo", "post", [local(1), local(2)]),
   bus("main", 1, "Main LR", "pa", "stereo", "post", [sl(15), sl(16)], "Lake 프로세서로"),

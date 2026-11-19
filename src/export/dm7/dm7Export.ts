@@ -9,7 +9,10 @@
  */
 import { resolvePhantom } from "@/model/derive";
 import type { BusKind, Color, OutputBus, PortRef, Show } from "@/model/schema";
+import type { SourceDef } from "@/model/library";
 import { busesOf } from "@/model/outputOps";
+import { consoleColor, DEFAULT_CONSOLE_PROFILE, profileByModel, type ConsoleProfile } from "../profile";
+import { pickIcon } from "../icons";
 import { blockData, findBlock, type Dm7File } from "./container";
 import {
   locate,
@@ -24,55 +27,8 @@ import {
   type MbdfSection,
 } from "./mbdf";
 
-export const DM7_NAME_MAX = 8;
-export const DM7_DCA_COUNT = 24;
-export const DM7_MUTE_COUNT = 12;
-export const DM7_OMNI_COUNT = 32; // 스키마의 Omni 인풋 포트 수 (DM7 Compact 본체 입력은 이보다 적을 수 있음)
-
-/** 파일(Editor)이 쓰는 컬러 이름. OSC 규격의 목록과 다르다(docs/research/dm7.md 3절) */
-export const DM7_COLOR: Record<Exclude<Color, "none">, { value: string; approx?: boolean }> = {
-  red: { value: "Red" },
-  orange: { value: "Orange" },
-  yellow: { value: "Yellow" },
-  green: { value: "Green" },
-  cyan: { value: "SkyBlue" },
-  blue: { value: "Blue" },
-  purple: { value: "Purple" },
-  white: { value: "White" },
-  pink: { value: "Pink" },
-  lime: { value: "LtGreen" },
-  brown: { value: "Orange", approx: true },
-  gray: { value: "White", approx: true },
-};
-
-/** 실제 DM7 파일에서 본 아이콘 이름만 쓴다 (규격 미공개) */
-const ICON_RULES: [RegExp, string][] = [
-  [/kick|킥|bd\b|bass ?drum/i, "Kick"],
-  [/snare|스네어|\bsn\b/i, "Snare"],
-  [/hi-?hat|하이햇|\bhh\b/i, "Hi-Hat"],
-  [/floor|f\.?tom|플로어/i, "F.Tom"],
-  [/tom|탐/i, "Tom"],
-  [/\boh\b|overhead|오버헤드|cymbal|ride|crash|심벌/i, "Cymbal"],
-  [/contra|upright|콘트라/i, "A.Bass"],
-  [/bass ?(amp|mic|cab)|베이스 ?(앰프|마이크)/i, "BassAmp"],
-  [/bass|베이스/i, "E.Bass"],
-  [/a\.? ?g(ui)?tr|acoustic|어쿠스틱|통기타/i, "A.Guitar"],
-  [/g(ui)?tr.*(amp|mic|cab)|guitar ?amp|기타 ?앰프/i, "GuitarAmp"],
-  [/g(ui)?tr|guitar|기타/i, "E.Guitar"],
-  [/piano|피아노/i, "Piano"],
-  [/key|synth|organ|건반|신스/i, "Keyboard"],
-  [/violin|viola|cello|string|바이올린|첼로|현악|가야금|거문고|해금|아쟁/i, "Strings"],
-  [/\bmr\b|track|playback|click|mtr|laptop|\bpc\b|반주/i, "Media1"],
-  [/talk ?back|\btb\b|토크백|podium|연설/i, "Podium"],
-];
-
-function iconFor(show: Show, ch: Show["inputs"][number]): string | null {
-  const text = `${ch.source} ${ch.shortName}`;
-  const mic = ch.mic?.kind === "library" ? show.microphones.find((m) => m.id === (ch.mic as { microphoneId: string }).microphoneId) : undefined;
-  for (const [re, icon] of ICON_RULES) if (re.test(text)) return icon;
-  if (/vox|vocal|voice|chorus|mc|보컬|사회|코러스|소리|민요/i.test(text)) return mic?.type === "wireless" ? "Wireless" : "Dynamic";
-  return null;
-}
+/** 스키마의 Omni 인풋 포트 수 (파일 형식 값. 기종 한도는 콘솔 프로필) */
+const DM7_OMNI_COUNT = 32;
 
 /* ───────────── 설정 ───────────── */
 
@@ -80,7 +36,7 @@ export type Dm7Item = "name" | "color" | "icon" | "patch" | "phantom" | "pair" |
 export const DM7_ITEMS: { key: Dm7Item; label: string; note?: string }[] = [
   { key: "name", label: "이름", note: "짧은 이름(없으면 소스명), 8자" },
   { key: "color", label: "컬러" },
-  { key: "icon", label: "아이콘", note: "소스명으로 추정 · 확인 필요" },
+  { key: "icon", label: "아이콘", note: "소스 목록·소스명으로 자동, 맞는 것이 없으면 Blank" },
   { key: "patch", label: "인풋 패치", note: "Bank A" },
   { key: "phantom", label: "48V", note: "포트 단위" },
   { key: "pair", label: "스테레오 페어" },
@@ -104,6 +60,13 @@ export interface Dm7Options {
   boxes: Record<string, Dm7BoxSetting>;
   /** 아웃풋 패치: OnePatch가 다루는 출력 포트(OMNI OUT, 박스의 Dante OUT 범위) 중 쓰지 않는 포트는 "없음"으로 */
   clearUnusedOutputs?: boolean;
+  /** 콘솔에 없는 OnePatch 컬러를 사용자가 고른 콘솔 컬러로 (점검 화면에서 확인) */
+  colorMap?: Partial<Record<Color, string>>;
+}
+
+/** 계획에 쓰는 바깥 정보 (아이콘: 내 소스 목록) */
+export interface Dm7Context {
+  sources?: readonly SourceDef[];
 }
 
 export function defaultDm7Options(show: Show): Dm7Options {
@@ -116,7 +79,7 @@ export function defaultDm7Options(show: Show): Dm7Options {
     nextOut += b.outputs;
   });
   return {
-    items: { name: true, color: true, icon: false, patch: true, phantom: true, pair: true, dca: true, mute: true, outPatch: true, busNames: true },
+    items: { name: true, color: true, icon: true, patch: true, phantom: true, pair: true, dca: true, mute: true, outPatch: true, busNames: true },
     boxes,
     clearUnusedOutputs: false,
   };
@@ -125,6 +88,7 @@ export function defaultDm7Options(show: Show): Dm7Options {
 /* ───────────── 계획 ───────────── */
 
 export interface Dm7Change {
+  item: Dm7Item;
   /** 인풋 채널 번호 (아웃풋 포트 변경이면 0) */
   ch: number;
   /** 표시용 대상 (없으면 "Ch n") */
@@ -136,7 +100,13 @@ export interface Dm7Change {
 
 export interface Dm7Plan {
   changes: Dm7Change[];
+  /** 내보내기 설정·데이터 문제 (점검 화면의 경고) */
   warnings: string[];
+  /** 알림: 콘솔에서 따로 할 일 (경고 아님) */
+  notes: string[];
+  /** 항목별로 OnePatch 값을 넣은 수(total)와 그중 파일과 달라 바꾼 수(changed) */
+  stats: Record<Dm7Item, { total: number; changed: number }>;
+  profile: ConsoleProfile;
   /** 바뀐 Current 데이터 (적용할 때 쓴다) */
   current: Uint8Array;
   maxChannels: number;
@@ -151,13 +121,11 @@ const MIX_BASE = 0x03e00000;
 const MATRIX_BASE = 0x04000000;
 const STEREO_A = 0x04200000; // L, R = +0, +1
 const STEREO_B = 0x04200010; // L (샘플 outpatch3). R은 미확인
-export const DM7_MIX_COUNT = 48;
-export const DM7_MATRIX_COUNT = 12;
 
 export function sourceLabel(v: number): string {
   if (v === 0) return "없음";
-  if (v >= MIX_BASE && v < MIX_BASE + DM7_MIX_COUNT) return `Mix ${v - MIX_BASE + 1}`;
-  if (v >= MATRIX_BASE && v < MATRIX_BASE + DM7_MATRIX_COUNT) return `Matrix ${v - MATRIX_BASE + 1}`;
+  if (v >= MIX_BASE && v < MIX_BASE + 0x100) return `Mix ${v - MIX_BASE + 1}`;
+  if (v >= MATRIX_BASE && v < MATRIX_BASE + 0x100) return `Matrix ${v - MATRIX_BASE + 1}`;
   if (v === STEREO_A || v === STEREO_A + 1) return `Stereo A ${v === STEREO_A ? "L" : "R"}`;
   if (v === STEREO_B) return "Stereo B";
   if (v >= OMNI_BASE && v < OMNI_BASE + 0x100) return `OMNI ${v - OMNI_BASE + 1}`;
@@ -191,29 +159,38 @@ const listOn = (v: boolean[]) => v.map((on, i) => (on ? i + 1 : 0)).filter(Boole
  * 원본 파일과 Show로 바꿀 내용을 계산한다 (파일은 아직 만들지 않음).
  * OnePatch의 채널 번호 n → DM7 인풋 n. Show에 없는 채널은 건드리지 않는다.
  */
-export function planDm7(show: Show, file: Dm7File, opts: Dm7Options): Dm7Plan {
+export function planDm7(show: Show, file: Dm7File, opts: Dm7Options, ctx: Dm7Context = {}): Dm7Plan {
   const block = findBlock(file, "CurrentBackupFile.bup");
   if (!block) throw new Error("파일에서 현재 설정(CurrentBackupFile.bup)을 찾지 못했습니다.");
   const cur = blockData(block).slice();
   const secs = parseSections(cur);
   const mixing = section(secs, "Mixing");
   const processing = section(secs, "Processing");
-  const maxChannels = Math.min(file.model === "DM7C" ? 72 : 120, locate(mixing, ["InputChannel"]).node.count);
+  const P = profileByModel(file.model);
+  const maxChannels = Math.min(P.inputs, locate(mixing, ["InputChannel"]).node.count);
   const changes: Dm7Change[] = [];
   const warnings: string[] = [];
-  const warnOnce = new Set<string>();
-  const warn = (w: string) => {
-    if (!warnOnce.has(w)) {
-      warnOnce.add(w);
-      warnings.push(w);
-    }
+  const notes: string[] = [];
+  const once = (list: string[]) => (w: string) => {
+    if (!list.includes(w)) list.push(w);
+  };
+  const warn = once(warnings);
+  const note = once(notes);
+  const stats = Object.fromEntries(DM7_ITEMS.map((i) => [i.key, { total: 0, changed: 0 }])) as Dm7Plan["stats"];
+  /** 항목 하나를 OnePatch 값으로 맞춤 (같으면 쓰지 않고 수만 센다) */
+  const record = (c: Dm7Change, write?: () => void) => {
+    stats[c.item].total++;
+    if (c.before === c.after) return;
+    write?.();
+    stats[c.item].changed++;
+    changes.push(c);
   };
   const I = opts.items;
   const chField = (n: number, ...path: string[]) => locate(mixing, [["InputChannel", n - 1], ...path]);
 
   const inRange = show.inputs.filter((c) => c.number >= 1 && c.number <= maxChannels);
   const out = show.inputs.filter((c) => !inRange.includes(c));
-  if (out.length) warn(`${file.model}의 인풋은 ${maxChannels}채널까지입니다. Ch ${out.map((c) => c.number).join(", ")}은(는) 넣지 않았습니다.`);
+  if (out.length) note(`${P.name}의 인풋은 ${maxChannels}채널까지라 Ch ${out.map((c) => c.number).join(", ")}은(는) 넣지 않았습니다.`);
   const byNumber = new Map(inRange.map((c) => [c.number, c]));
 
   // 스테레오 페어: L 채널(stereoLinkNext)과 바로 다음 번호
@@ -224,33 +201,26 @@ export function planDm7(show: Show, file: Dm7File, opts: Dm7Options): Dm7Plan {
 
   for (const ch of inRange) {
     const n = ch.number;
-    const set = (field: string, before: string, after: string, write: () => void) => {
-      if (before === after) return;
-      write();
-      changes.push({ ch: n, field, before, after });
-    };
+    const set = (item: Dm7Item, field: string, before: string, after: string, write: () => void) =>
+      record({ item, ch: n, field, before, after }, write);
 
     if (I.name) {
-      const raw = (ch.shortName || ch.source).trim();
-      const chars = [...raw];
-      const name = chars.slice(0, DM7_NAME_MAX).join("");
-      if (chars.length > DM7_NAME_MAX) warn(`Ch ${n} 이름 “${raw}”을(를) 8자 “${name}”로 잘랐습니다.`);
-      if (/[^\x20-\x7e]/.test(name)) warn("영문이 아닌 이름이 있습니다. 콘솔 SETUP의 Name Language가 그 언어로 되어 있어야 제대로 보입니다.");
+      const name = fitName(ch.shortName || ch.source, P.nameMax) ?? "";
+      if (/[^\x20-\x7e]/.test(name)) note("영문이 아닌 이름이 있습니다. 콘솔 SETUP의 Name Language를 그 언어(한국어)로 맞추세요.");
       const f = chField(n, "Label", "Name");
-      set("이름", readString(cur, f), name, () => writeString(cur, f, name));
+      set("name", "이름", readString(cur, f), name, () => writeString(cur, f, name));
     }
-    if (I.color && ch.color !== "none") {
-      const c = DM7_COLOR[ch.color];
-      if (c.approx) warn(`DM7에 없는 컬러는 가까운 색으로 바꿨습니다 (갈색 → Orange, 회색 → White).`);
-      const f = chField(n, "Label", "Color");
-      set("컬러", readString(cur, f), c.value, () => writeString(cur, f, c.value));
+    if (I.color) {
+      const c = consoleColor(P, ch.color, opts.colorMap);
+      if (c) {
+        const f = chField(n, "Label", "Color");
+        set("color", "컬러", readString(cur, f), c.value, () => writeString(cur, f, c.value));
+      }
     }
     if (I.icon) {
-      const icon = iconFor(show, ch);
-      if (icon) {
-        const f = chField(n, "Label", "Icon");
-        set("아이콘", readString(cur, f), icon, () => writeString(cur, f, icon));
-      }
+      const icon = pickIcon(P, show, ch, ctx.sources);
+      const f = chField(n, "Label", "Icon");
+      set("icon", "아이콘", readString(cur, f), icon, () => writeString(cur, f, icon));
     }
     const target = portTarget(show, ch.port, opts);
     if (target === "unmapped") warn(`Ch ${n}: 스테이지박스의 Dante 시작 번호가 비어 있거나 OMNI 범위를 넘어 패치하지 않았습니다.`);
@@ -259,9 +229,9 @@ export function planDm7(show: Show, file: Dm7File, opts: Dm7Options): Dm7Plan {
       const src = locate(mixing, [["InputChannel", n - 1], "InPatch", ["Bank", 0], "Source"]);
       if (readBit(cur, sel)) {
         writeBit(cur, sel, 0, false);
-        changes.push({ ch: n, field: "패치 뱅크", before: "B", after: "A" });
+        changes.push({ item: "patch", ch: n, field: "패치 뱅크", before: "B", after: "A" });
       }
-      set("패치", sourceLabel(readUint(cur, src)), target.label, () => writeUint(cur, src, target.source));
+      set("patch", "패치", sourceLabel(readUint(cur, src)), target.label, () => writeUint(cur, src, target.source));
     }
     if (I.phantom && target && target !== "unmapped") {
       if (!target.phantom) warn("48V: I/O 유닛 번호가 비어 있는 스테이지박스의 48V는 쓰지 않았습니다.");
@@ -290,11 +260,12 @@ export function planDm7(show: Show, file: Dm7File, opts: Dm7Options): Dm7Plan {
       const want = pairL.has(n) ? 0x80 : pairR.has(n) ? 0x01 : 0x00;
       const before = readUint(cur, rel);
       const label = (v: number) => (v === 0x80 ? `페어 L (${n}–${n + 1})` : v === 0x01 ? `페어 R (${n - 1}–${n})` : v ? `0x${v.toString(16)}` : "단독");
-      if (before !== want) {
-        writeUint(cur, rel, want);
-        for (const g of gang) writeBit(cur, g, 0, want !== 0);
-        writeString(cur, pan, want ? "BALANCE" : "PAN");
-        changes.push({ ch: n, field: "페어", before: label(before), after: label(want) });
+      if (want || before) {
+        set("pair", "페어", label(before), label(want), () => {
+          writeUint(cur, rel, want);
+          for (const g of gang) writeBit(cur, g, 0, want !== 0);
+          writeString(cur, pan, want ? "BALANCE" : "PAN");
+        });
       }
       if (want === 0x80 && n % 2 === 0) warn(`Ch ${n}–${n + 1} 페어가 짝수 채널에서 시작합니다.`);
     }
@@ -302,44 +273,49 @@ export function planDm7(show: Show, file: Dm7File, opts: Dm7Options): Dm7Plan {
     const groupSrc = pairR.has(n) ? [ch, byNumber.get(n - 1)!] : pairL.has(n) ? [ch, byNumber.get(n + 1)!] : [ch];
     if (I.dca) {
       const nums = new Set(groupSrc.flatMap((c) => c.dcaIds).map((id) => show.dcas.find((d) => d.id === id)?.number ?? 0));
-      [...nums].filter((x) => x > DM7_DCA_COUNT).forEach((x) => warn(`DCA ${x}: DM7은 DCA ${DM7_DCA_COUNT}까지라 넣지 않았습니다.`));
       const f = chField(n, "DCA", "Assign");
-      const before = bits(cur, f, DM7_DCA_COUNT);
+      const before = bits(cur, f, Math.min(P.dcas, f.node.count));
       const after = before.map((_, i) => nums.has(i + 1));
-      set("DCA", listOn(before), listOn(after), () => after.forEach((on, i) => writeBit(cur, f, i, on)));
+      if (nums.size || before.some(Boolean)) set("dca", "DCA", listOn(before), listOn(after), () => after.forEach((on, i) => writeBit(cur, f, i, on)));
     }
     if (I.mute) {
       const nums = new Set(groupSrc.flatMap((c) => c.muteGroupIds).map((id) => show.muteGroups.find((g) => g.id === id)?.number ?? 0));
-      [...nums].filter((x) => x > DM7_MUTE_COUNT).forEach((x) => warn(`뮤트 그룹 ${x}: DM7은 ${DM7_MUTE_COUNT}까지라 넣지 않았습니다.`));
       const f = chField(n, "MuteGroup", "Assign");
-      const before = bits(cur, f, DM7_MUTE_COUNT);
+      const before = bits(cur, f, Math.min(P.muteGroups, f.node.count));
       const after = before.map((_, i) => nums.has(i + 1));
-      set("뮤트", listOn(before), listOn(after), () => after.forEach((on, i) => writeBit(cur, f, i, on)));
+      if (nums.size || before.some(Boolean)) set("mute", "뮤트", listOn(before), listOn(after), () => after.forEach((on, i) => writeBit(cur, f, i, on)));
     }
   }
 
   for (const p of phantomPorts.values()) {
     const before = readBit(cur, p.ref);
-    if (before !== p.on) {
-      writeBit(cur, p.ref, 0, p.on);
-      changes.push({ ch: p.chs[0], field: `48V (${p.label})`, before: before ? "켜짐" : "꺼짐", after: p.on ? "켜짐" : "꺼짐" });
-    }
+    record({ item: "phantom", ch: p.chs[0], field: `48V (${p.label})`, before: before ? "켜짐" : "꺼짐", after: p.on ? "켜짐" : "꺼짐" }, () => writeBit(cur, p.ref, 0, p.on));
   }
-  const busMap = I.outPatch ? planOutputs(show, cur, processing, opts, changes, warn) : [];
-  if (I.busNames) planNames(show, cur, mixing, changes, warn);
-  return { changes, warnings, current: cur, maxChannels, busMap };
+  const ctxOut: OutCtx = { show, cur, P, record, warn, note };
+  const busMap = I.outPatch ? planOutputs(ctxOut, processing, opts) : [];
+  if (I.busNames) planNames(ctxOut, mixing);
+  return { changes, warnings, notes, stats, profile: P, current: cur, maxChannels, busMap };
 }
 
 /* ───────────── 버스·DCA·뮤트 그룹 이름 ───────────── */
 
-/** 이름 8자로 맞추기 (빈 이름이면 null = 파일의 기본 이름을 그대로 둠) */
-function fitName(raw: string, what: string, warn: (w: string) => void): string | null {
+type OutCtx = {
+  show: Show;
+  cur: Uint8Array;
+  P: ConsoleProfile;
+  record: (c: Dm7Change, write?: () => void) => void;
+  warn: (w: string) => void;
+  note: (w: string) => void;
+};
+
+/**
+ * 이름을 콘솔 글자 수로 맞추기 (빈 이름이면 null = 파일의 기본 이름을 그대로 둠).
+ * 넘는 이름은 내보내기 전 점검 화면(src/export/checks.ts)에서 고치게 하고, 그대로 내보내면 뒤를 자른다.
+ */
+function fitName(raw: string, max: number): string | null {
   const t = raw.trim();
   if (!t) return null;
-  const chars = [...t];
-  const name = chars.slice(0, DM7_NAME_MAX).join("").trimEnd();
-  if (chars.length > DM7_NAME_MAX) warn(`${what} 이름 “${t}”을(를) 8자 “${name}”로 잘랐습니다.`);
-  return name;
+  return [...t].slice(0, max).join("").trimEnd();
 }
 
 /**
@@ -347,16 +323,13 @@ function fitName(raw: string, what: string, warn: (w: string) => void): string |
  * Mix·Matrix 번호는 아웃풋 패치와 같은 배정(allocateBuses)을 따른다.
  * Stereo 컬렉션은 4개(A L, A R, B L, B R)라 Main 이름을 둘씩 쓴다.
  */
-function planNames(show: Show, cur: Uint8Array, mixing: MbdfSection, changes: Dm7Change[], warn: (w: string) => void) {
+function planNames({ show, cur, P, record, warn, note }: OutCtx, mixing: MbdfSection) {
   const write = (coll: string, index: number, target: string, name: string) => {
     const f = locate(mixing, [[coll, index], "Label", "Name"]);
-    const before = readString(cur, f);
-    if (before === name) return;
-    writeString(cur, f, name);
-    changes.push({ ch: 0, target, field: "이름", before, after: name });
+    record({ item: "busNames", ch: 0, target, field: "이름", before: readString(cur, f), after: name }, () => writeString(cur, f, name));
   };
-  for (const a of allocateBuses(show, warn)) {
-    const name = fitName(a.bus.name, a.label, warn);
+  for (const a of allocateBuses(show, { warn, note }, P)) {
+    const name = fitName(a.bus.name, P.nameMax);
     if (!name) continue;
     if (a.bus.kind === "main") {
       const first = a.label === "Stereo A" ? 0 : 2;
@@ -368,13 +341,13 @@ function planNames(show: Show, cur: Uint8Array, mixing: MbdfSection, changes: Dm
     for (const src of a.sources) write(coll, src - base, `${coll} ${src - base + 1}`, name);
   }
   for (const d of show.dcas) {
-    if (d.number > DM7_DCA_COUNT) continue;
-    const name = fitName(d.name, `DCA ${d.number}`, warn);
+    if (d.number > P.dcas) continue;
+    const name = fitName(d.name, P.nameMax);
     if (name) write("DCA", d.number - 1, `DCA ${d.number}`, name);
   }
   for (const g of show.muteGroups) {
-    if (g.number > DM7_MUTE_COUNT) continue;
-    const name = fitName(g.name, `뮤트 그룹 ${g.number}`, warn);
+    if (g.number > P.muteGroups) continue;
+    const name = fitName(g.name, P.nameMax);
     if (name) write("Mute", g.number - 1, `뮤트 그룹 ${g.number}`, name);
   }
 }
@@ -387,7 +360,12 @@ function planNames(show: Show, cur: Uint8Array, mixing: MbdfSection, changes: Dm
  * Matrix도 같은 방식. Main은 첫째 → Stereo A(L/R), 둘째(Mono/Sub 등) → Stereo B.
  * Stereo B의 R 소스 번호는 미확인이라 스테레오인 경우 L만 쓴다.
  */
-export function allocateBuses(show: Show, warn: (w: string) => void) {
+export function allocateBuses(
+  show: Show,
+  log: { warn: (w: string) => void; note: (w: string) => void } | ((w: string) => void),
+  P: ConsoleProfile = DEFAULT_CONSOLE_PROFILE,
+) {
+  const { warn, note } = typeof log === "function" ? { warn: log, note: log } : log;
   const out: { bus: OutputBus; label: string; sources: number[] }[] = [];
   const alloc = (kind: BusKind, base: number, max: number, name: string) => {
     let next = 1;
@@ -395,7 +373,7 @@ export function allocateBuses(show: Show, warn: (w: string) => void) {
       if (b.width === "stereo" && next % 2 === 0) next++;
       const n = b.width === "stereo" ? 2 : 1;
       if (next + n - 1 > max) {
-        warn(`${name} 수가 DM7의 ${max}개를 넘어 “${b.name || `${name} ${b.number}`}”부터는 넣지 않았습니다.`);
+        note(`${name} 수가 ${P.name}의 ${max}개를 넘어 “${b.name || `${name} ${b.number}`}”부터는 넣지 않았습니다.`);
         return;
       }
       const sources = Array.from({ length: n }, (_, k) => base + next - 1 + k);
@@ -403,30 +381,23 @@ export function allocateBuses(show: Show, warn: (w: string) => void) {
       next += n;
     }
   };
-  alloc("aux", MIX_BASE, DM7_MIX_COUNT, "Mix");
-  alloc("matrix", MATRIX_BASE, DM7_MATRIX_COUNT, "Matrix");
+  alloc("aux", MIX_BASE, P.mixes, "Mix");
+  alloc("matrix", MATRIX_BASE, P.matrices, "Matrix");
   busesOf(show, "main").forEach((b, i) => {
     if (i === 0) out.push({ bus: b, label: "Stereo A", sources: b.width === "stereo" ? [STEREO_A, STEREO_A + 1] : [STEREO_A] });
     else if (i === 1) {
       out.push({ bus: b, label: "Stereo B", sources: [STEREO_B] });
       if (b.width === "stereo" && b.ports.length > 1)
         warn(`“${b.name || "Main"}”: Stereo B의 R 출력 소스 번호는 아직 확인하지 못해 L만 패치했습니다.`);
-    } else if (b.ports.length) warn(`“${b.name || "Main"}”: DM7의 Stereo는 A·B 두 개라 패치하지 않았습니다.`);
+    } else if (b.ports.length) note(`“${b.name || "Main"}”: ${P.name}의 Stereo는 A·B 두 개라 패치하지 않았습니다.`);
   });
   if (out.some((x) => x.sources.length === 2 && x.bus.kind !== "main"))
-    warn("스테레오 Mix·Matrix는 DM7 DM Editor의 Bus Setup에서 해당 번호 두 개를 스테레오(페어)로 설정해야 합니다. OnePatch는 출력 패치만 씁니다.");
+    note("스테레오 Mix·Matrix는 콘솔(또는 DM Editor)의 Bus Setup에서 해당 번호 두 개를 스테레오로 설정하세요. OnePatch는 출력 패치와 이름만 씁니다.");
   return out;
 }
 
-function planOutputs(
-  show: Show,
-  cur: Uint8Array,
-  processing: MbdfSection,
-  opts: Dm7Options,
-  changes: Dm7Change[],
-  warn: (w: string) => void,
-) {
-  const alloc = allocateBuses(show, warn);
+function planOutputs({ show, cur, P, record, warn, note }: OutCtx, processing: MbdfSection, opts: Dm7Options) {
+  const alloc = allocateBuses(show, { warn, note }, P);
   const omniCount = locate(processing, ["Omni", "OutputPort"]).node.count;
   const danteCount = locate(processing, ["Dante", "OutputPort"]).node.count;
   const portRef = (p: PortRef): { sec: "Omni" | "Dante"; index: number; label: string } | null => {
@@ -461,9 +432,7 @@ function planOutputs(
   const setPort = (sec: "Omni" | "Dante", index: number, label: string, source: number) => {
     const f = locate(processing, [sec, ["OutputPort", index], "Patch", "Source"]);
     const before = readUint(cur, f);
-    if (before === source) return;
-    writeUint(cur, f, source);
-    changes.push({ ch: 0, target: label, field: "출력 소스", before: sourceLabel(before), after: sourceLabel(source) });
+    record({ item: "outPatch", ch: 0, target: label, field: "출력 소스", before: sourceLabel(before), after: sourceLabel(source) }, () => writeUint(cur, f, source));
   };
   for (const w of written.values()) setPort(w.sec, w.index, w.label, w.source);
   if (opts.clearUnusedOutputs) {

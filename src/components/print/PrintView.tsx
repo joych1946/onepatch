@@ -21,12 +21,14 @@ import {
   type ReportColumn,
 } from "@/model/reports";
 import { buildShowXlsx, fileBase, toCsv } from "@/lib/showExport";
+import { consoleTasks, TASK_SECTIONS } from "@/export/dm7/tasks";
+import { DEFAULT_CONSOLE_PROFILE } from "@/export/profile";
 import { downloadBlob, downloadText, isTypingTarget } from "@/lib/download";
 import { useLibrary } from "../useLibrary";
 import { PagedTable, type Orientation, type PagedItem } from "./Paged";
 import { CableLabels, PatchSheets, StripLabels } from "./Docs";
 
-type Doc = "inputs" | "outputs" | "patch" | "summary" | "cable" | "strip";
+type Doc = "inputs" | "outputs" | "patch" | "summary" | "cable" | "strip" | "tasks";
 const DOCS: { id: Doc; name: string; orientation: Orientation }[] = [
   { id: "inputs", name: "인풋리스트", orientation: "landscape" },
   { id: "outputs", name: "아웃풋 리스트", orientation: "landscape" },
@@ -34,6 +36,14 @@ const DOCS: { id: Doc; name: string; orientation: Orientation }[] = [
   { id: "summary", name: "장비 집계표", orientation: "portrait" },
   { id: "strip", name: "콘솔 스트립 라벨", orientation: "landscape" },
   { id: "cable", name: "멀티케이블 라벨", orientation: "portrait" },
+  { id: "tasks", name: "콘솔 할 일", orientation: "portrait" },
+];
+
+const TASK_COLUMNS: ReportColumn[] = [
+  { key: "check", label: "✓", width: 4, align: "center" },
+  { key: "target", label: "대상", width: 30 },
+  { key: "task", label: "할 일", width: 40 },
+  { key: "note", label: "참고", width: 26 },
 ];
 
 type Settings = {
@@ -141,6 +151,17 @@ export default function PrintView({ id }: { id: string }) {
     () => (show ? outputReportSections(show).flatMap((sec) => [{ kind: "section" as const, title: sec.title }, ...sec.rows.map((r) => ({ kind: "row" as const, cells: r.cells }))]) : []),
     [show],
   );
+  const taskItems = useMemo<PagedItem[]>(() => {
+    if (!show) return [];
+    const tasks = consoleTasks(show, DEFAULT_CONSOLE_PROFILE);
+    return TASK_SECTIONS.flatMap((sec) => {
+      const list = tasks.filter((t) => t.section === sec);
+      return list.length
+        ? [{ kind: "section" as const, title: sec }, ...list.map((t) => ({ kind: "row" as const, cells: { check: "☐", target: t.target, task: t.task, note: t.note ?? "" } }))]
+        : [];
+    });
+  }, [show]);
+
   const summaryItems = useMemo<PagedItem[]>(() => {
     if (!show) return [];
     const eq = equipmentSummary(show, library, s.spare);
@@ -286,6 +307,11 @@ export default function PrintView({ id }: { id: string }) {
             </>
           )}
           {s.doc === "patch" && <span className="text-neutral-500">스테이지박스마다 한 장. 포트 16개씩 세로 칸, 빈 포트도 표시합니다.</span>}
+          {s.doc === "tasks" && (
+            <span className="text-neutral-500">
+              {DEFAULT_CONSOLE_PROFILE.name} 쇼 파일로 넣지 못하는 것(게인·EQ, 버스 스테레오 설정, Aux Pre/Post, Matrix 소스 등)을 이 Show에 맞춰 뽑은 체크리스트입니다.
+            </span>
+          )}
           {s.doc === "summary" && (
             <>
               {num(s.spare, (v) => set({ spare: Math.max(0, v) }), "케이블 여분 %")}
@@ -336,7 +362,7 @@ export default function PrintView({ id }: { id: string }) {
           )}
         </div>
         <p className="text-[11px] text-neutral-500">
-          인쇄 창에서 대상 “PDF로 저장”, 배율 100%(기본), 여백 “없음” 또는 “기본”을 고르세요. 미리보기의 쪽 구성이 그대로 인쇄됩니다. 숫자 1~6으로 출력물 전환.
+          인쇄 창에서 대상 “PDF로 저장”, 배율 100%(기본), 여백 “없음” 또는 “기본”을 고르세요. 미리보기의 쪽 구성이 그대로 인쇄됩니다. 숫자 1~7로 출력물 전환.
         </p>
       </div>
 
@@ -363,6 +389,18 @@ export default function PrintView({ id }: { id: string }) {
         )}
         {s.doc === "strip" && <StripLabels show={show} perStrip={s.perStrip} cellMm={s.cellMm} heightMm={s.stripMm} printedAt={printedAt} />}
         {s.doc === "cable" && <CableLabels show={show} sheet={labelSheet} startAt={s.startAt} />}
+        {s.doc === "tasks" && (
+          <PagedTable
+            show={show}
+            docName="콘솔 할 일"
+            extra={DEFAULT_CONSOLE_PROFILE.name}
+            orientation="portrait"
+            columns={TASK_COLUMNS}
+            items={taskItems}
+            fontPt={9}
+            printedAt={printedAt}
+          />
+        )}
       </div>
     </div>
   );

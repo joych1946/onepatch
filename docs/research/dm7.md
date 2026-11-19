@@ -66,7 +66,9 @@
   - `#YAMAHA MBDFProjectFile`, 기종 `DM7`
   - 형식 버전 4바이트: V2 = `56 02 01 00`, V1.7.5 = `56 01 4b 00`
   - **UUID v4 16바이트**(저장할 때마다 새로 생김, 체크섬 아님)
-  - ProjectInfo: 기종 `DM7C`, 저장 시각 UTC 등
+  - ProjectInfo: 머리말 자체가 MBDF 섹션(스키마 포함)이라 `Info/{ProductName, ProductSubName, Comment, OwnerName, Category, UnitMode}`와 `Info/TimeStamp/{Year(2), Month, Day, Hour, Minute, Second}`를 스키마로 읽는다 🔬
+    - 기종: ProductName `DM7`, ProductSubName `DM7C`
+    - **저장 시각은 UTC** 🔬 — `basic` 06:32:58 = 파일 시각 15:32(KST), `rio_base` 02:28:54 = 11:28(KST). 8-D의 기준 파일 정보에 쓴다
 - **블록** `#FILE` × 8 (4바이트 정렬). 블록 머리는 빅엔디언이다.
 
   | 위치 | 내용 |
@@ -177,6 +179,15 @@
   - Rio 신호: 정상 (사용자 확인). DM Editor 온라인 화면에서 Rio1608-D #1에 `+48V Active` 표시
   - 다르게 들어간 항목: 없음 → 고칠 것 없음
   - Rio 샘플(`rio_base`, `rio_48V_1`, `rio_48V_5`, `rio_gian`)로 유닛 번호 대응을 확인하고 테스트로 남김. `rio_48V_5`는 Rio 5번이 아니라 **OMNI 5** 48V가 켜져 있어 Rio 포트 간격 확인에는 쓰지 못함
+
+## 5-1. 8-D 현장용 다듬기
+
+- **기준 파일 보관**: 한 번 올린 `.dmxf`를 IndexedDB(`consoleFiles`, 키 `dm7`)에 원본 바이트 그대로 보관 → 모든 Show에서 다시 올리지 않고 내보낸다. 기종·형식 버전·저장 시각(머리말)을 보여주고 교체·삭제한다.
+- **콘솔 프로필** (`src/export/profile.ts`): 이름 글자 수(8), 채널(DM7 Compact 72 / DM7 120)·Mix 48·Matrix 12·Stereo 2·DCA 24·뮤트 12, 컬러 목록·대응, 아이콘 목록(4.x에서 관찰한 이름만)과 소스·악기군별 아이콘. 오류 검사의 이름 글자 수도 이 값을 쓴다.
+- **내보내기 전 점검** (`src/export/checks.ts`): 글자 수 넘는 이름(줄인 이름 제안, 그 자리에서 고치기), 콘솔에 없는 컬러(갈색 → Orange, 회색 → White 제안, 고르면 해결), 기종 한도, 오류 검사 경고.
+- **아이콘 자동**: 내 소스 목록의 소스·악기군 → 보컬 이름(무선이면 Wireless) → 이름 규칙 → 없으면 `Blank`. 관악·국악 관악·타악(장구·북)·퍼커션은 관찰된 아이콘이 없어 Blank.
+- **콘솔에서 직접 할 일** (`src/export/dm7/tasks.ts`, 인쇄 화면 “콘솔 할 일”): Dante 연결·UNIT ID, Name Language(한글 이름이 있을 때), 채널별 게인·HPF·EQ·다이내믹스, Bus Setup 스테레오, Aux 센드 Pre/Post, FX, Matrix 소스, Stereo B R, Scene 저장·백업.
+- **결과 요약**: 항목별로 넣은 수와 그중 파일과 달라 바뀐 수, 넣지 않는 것. 기준 파일의 다른 블록은 원래 압축 바이트 그대로(테스트로 확인).
 
 ## 6. 남은 확인 사항
 
