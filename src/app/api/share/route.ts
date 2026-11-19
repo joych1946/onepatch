@@ -13,7 +13,26 @@ const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 const NOT_CONNECTED = { error: "공유 저장소가 연결되지 않았습니다. Vercel 프로젝트에 Blob 저장소를 연결하세요 (README 참고)." };
 
+/** 저장소 오류를 숨기지 않고 알려 준다 (Vercel 로그에도 남김) */
+async function guard(fn: () => Promise<Response>): Promise<Response> {
+  try {
+    return await fn();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[share]", e);
+    return json({ error: `공유 저장소 오류: ${msg}` }, 502);
+  }
+}
+
 export async function GET(request: Request) {
+  return guard(() => getShare(request));
+}
+
+export async function POST(request: Request) {
+  return guard(() => postShare(request));
+}
+
+async function getShare(request: Request) {
   const id = new URL(request.url).searchParams.get("id") ?? "";
   if (!ID_RE.test(id)) return json({ error: "잘못된 공유 링크입니다." }, 400);
   const store = shareBackend();
@@ -30,7 +49,7 @@ const Body = z.object({
   stop: z.boolean().optional(),
 });
 
-export async function POST(request: Request) {
+async function postShare(request: Request) {
   const store = shareBackend();
   if (!store) return json(NOT_CONNECTED, 503);
   const text = await request.text();

@@ -22,20 +22,41 @@ interface Backend {
   remove(id: string): Promise<void>;
 }
 
+/**
+ * Blob 저장소는 만들 때 공개(public)·비공개(private)를 고른다. 비공개로 먼저 쓰고, 저장소가 공개라서 거절되면 공개로 바꿔 기억한다.
+ * (ONEPATCH_BLOB_ACCESS=public|private로 정할 수도 있다.) 공개여도 경로에 추측할 수 없는 공유 id가 들어가므로 링크를 아는 사람만 본다.
+ */
+type Access = "private" | "public";
+let access: Access = process.env.ONEPATCH_BLOB_ACCESS === "public" ? "public" : "private";
+const accessProblem = (e: unknown) => /public|private|access/i.test(e instanceof Error ? e.message : String(e)) && !/token/i.test(String(e));
+async function withAccess<T>(fn: (a: Access) => Promise<T>): Promise<T> {
+  try {
+    return await fn(access);
+  } catch (e) {
+    if (process.env.ONEPATCH_BLOB_ACCESS || !accessProblem(e)) throw e;
+    const other: Access = access === "private" ? "public" : "private";
+    const r = await fn(other);
+    access = other;
+    return r;
+  }
+}
+
 const blobBackend: Backend = {
   async read(id) {
-    const r = await get(`shares/${id}.json`, { access: "private", useCache: false });
+    const r = await withAccess((a) => get(`shares/${id}.json`, { access: a, useCache: false }));
     if (!r || r.statusCode !== 200) return null;
     return JSON.parse(await new Response(r.stream).text()) as ShareRecord;
   },
   async write(id, rec) {
-    await put(`shares/${id}.json`, JSON.stringify(rec), {
-      access: "private",
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      contentType: "application/json",
-      cacheControlMaxAge: 60,
-    });
+    await withAccess((a) =>
+      put(`shares/${id}.json`, JSON.stringify(rec), {
+        access: a,
+        addRandomSuffix: false,
+        allowOverwrite: true,
+        contentType: "application/json",
+        cacheControlMaxAge: 60,
+      }),
+    );
   },
   async remove(id) {
     await del(`shares/${id}.json`);
