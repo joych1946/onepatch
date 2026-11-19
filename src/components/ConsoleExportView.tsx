@@ -27,6 +27,7 @@ import { COLOR_LABEL } from "@/model/labels";
 import { deleteConsoleBase, getConsoleBase, putConsoleBase } from "@/storage/consoleFileStore";
 import { useShowDoc } from "./useShowDoc";
 import { useLibrary } from "./useLibrary";
+import { ConsoleChanges } from "./Dm7Import";
 
 const KEY = (id: string) => `onepatch.dm7.${id}`;
 const BASE_KEY = "dm7";
@@ -533,6 +534,11 @@ export default function ConsoleExportView({ id }: { id: string }) {
             </p>
           </>
         )}
+      </section>
+
+      <section className={step} aria-label="콘솔에서 고친 내용 가져오기">
+        <h2 className="mb-2 font-semibold">6. 콘솔에서 고친 내용 가져오기</h2>
+        <ConsoleChanges show={show} opts={opts} library={lib.library} apply={doc.apply} />
       </section>
     </main>
   );

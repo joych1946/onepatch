@@ -19,6 +19,7 @@ import { BUILTIN_SHOW_TEMPLATES, showFromTemplate } from "@/model/templates";
 import type { Show } from "@/model/schema";
 import { useLibrary } from "./useLibrary";
 import ChoiceSheet from "./ChoiceSheet";
+import { NewShowFromDm7 } from "./Dm7Import";
 import { BackupBanner, PersistNotice, RestoreDialog, useBackup, useWelcome, Welcome } from "./DataCare";
 import { applyShowInfo, EDIT_TITLE_KEY } from "@/model/showInfo";
 
@@ -33,6 +34,7 @@ export default function ShowList() {
   const { library } = useLibrary();
   const [tplOpen, setTplOpen] = useState(false);
   const welcome = useWelcome();
+  const [dm7Open, setDm7Open] = useState(false);
   /** 이름 바꾸는 중인 Show id */
   const [renaming, setRenaming] = useState<string | null>(null);
 
@@ -90,6 +92,11 @@ export default function ShowList() {
       } catch {}
       router.push(routes.show(show.id));
     },
+    /** DM7 파일에서 만든 Show: 공연명은 이미 정했으므로 바로 연다 */
+    createAndOpen: async (show: Show) => {
+      await putShow(show);
+      router.push(routes.show(show.id));
+    },
     duplicate: async (id: string) => {
       const show = await getShow(id);
       if (!show) return;
@@ -137,7 +144,7 @@ export default function ShowList() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (tplOpen || renaming || welcome.open || bk.pending || isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (tplOpen || renaming || welcome.open || bk.pending || dm7Open || isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       const n = shows?.length ?? 0;
       switch (e.key) {
         case "ArrowDown":
@@ -200,6 +207,9 @@ export default function ShowList() {
         </button>
         <button className={btn} onClick={() => fileRef.current?.click()}>
           JSON 가져오기 <kbd>I</kbd>
+        </button>
+        <button className={btn} onClick={() => setDm7Open(true)} title="콘솔·DM Editor에서 저장한 .dmxf를 읽어 새 Show로">
+          DM7 파일에서 새 Show
         </button>
         <button className={btn} onClick={() => run(actions.addSample())}>
           샘플 추가
@@ -354,6 +364,16 @@ export default function ShowList() {
           onSample={() => {
             welcome.close();
             run(actions.openSample());
+          }}
+        />
+      )}
+      {dm7Open && (
+        <NewShowFromDm7
+          library={library}
+          onClose={() => setDm7Open(false)}
+          onCreate={(show) => {
+            setDm7Open(false);
+            run(actions.createAndOpen(show));
           }}
         />
       )}

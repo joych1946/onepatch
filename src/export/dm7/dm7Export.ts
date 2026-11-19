@@ -114,20 +114,20 @@ export interface Dm7Plan {
   busMap: { bus: string; dm7: string }[];
 }
 
-const OMNI_BASE = 0x01401000;
-const DANTE_BASE = 0x01a00000;
+export const OMNI_BASE = 0x01401000;
+export const DANTE_BASE = 0x01a00000;
 /* 아웃풋 패치 소스 (샘플 outpatch, outpatch2로 확인) */
-const MIX_BASE = 0x03e00000;
-const MATRIX_BASE = 0x04000000;
-const STEREO_A = 0x04200000; // L, R = +0, +1
-const STEREO_B = 0x04200010; // L (샘플 outpatch3). R은 미확인
+export const MIX_BASE = 0x03e00000;
+export const MATRIX_BASE = 0x04000000;
+export const STEREO_A = 0x04200000; // L, R = +0, +1
+export const STEREO_B = 0x04200010; // L (샘플 outpatch3). R = +1은 기본 패치(Dante OUT 64)에서 관찰, 내보내기에는 아직 쓰지 않음
 
 export function sourceLabel(v: number): string {
   if (v === 0) return "없음";
   if (v >= MIX_BASE && v < MIX_BASE + 0x100) return `Mix ${v - MIX_BASE + 1}`;
   if (v >= MATRIX_BASE && v < MATRIX_BASE + 0x100) return `Matrix ${v - MATRIX_BASE + 1}`;
   if (v === STEREO_A || v === STEREO_A + 1) return `Stereo A ${v === STEREO_A ? "L" : "R"}`;
-  if (v === STEREO_B) return "Stereo B";
+  if (v === STEREO_B || v === STEREO_B + 1) return `Stereo B ${v === STEREO_B ? "L" : "R"}`;
   if (v >= OMNI_BASE && v < OMNI_BASE + 0x100) return `OMNI ${v - OMNI_BASE + 1}`;
   if (v >= DANTE_BASE && v < DANTE_BASE + 0x1000) return `Dante ${v - DANTE_BASE + 1}`;
   return `0x${v.toString(16)}`;

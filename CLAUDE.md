@@ -42,4 +42,5 @@
 - 주소: Show id는 쿼리(`/show?id=`, `/show/print?id=`, `/show/console?id=`, `src/lib/routes.ts`)로 둔다 — 모든 페이지가 정적이라 오프라인용으로 미리 저장된다. 예전 `/shows/[id]`는 next.config의 redirects.
 - 오프라인·새 버전: `scripts/sw.template.js` → 빌드 때 `scripts/build-sw.mjs`가 `public/sw.js` 생성(커밋하지 않음), 등록·안내는 `src/components/AppUpdate.tsx`(빌드한 앱에서만). 확인은 `npm run build && npx next start -p 3100`.
 - 전체 백업·복원(합치기/덮어쓰기)·백업 알림: `src/model/backup.ts`, `src/storage/backupStore.ts`, 화면 `src/components/DataCare.tsx`(영구 저장 요청·첫 사용 안내 포함).
+- 콘솔 읽기(DM7 → Show): `src/export/dm7/dm7Import.ts`(파일 → 스냅샷), `src/export/importShow.ts`(새 Show·콘솔 변경분, 기종 중립), 화면 `src/components/Dm7Import.tsx`(목록 "DM7 파일에서 새 Show", 콘솔 화면 6번).
 - 콘솔 내보내기(DM7): `src/export/dm7/`. 쇼 파일 위치는 항상 파일 안 스키마로 계산(`mbdf.ts`)하고 코드에 박지 않는다. 검증 샘플은 `~/Documents/vender/dm7`(저장소 밖, 없으면 테스트 건너뜀).

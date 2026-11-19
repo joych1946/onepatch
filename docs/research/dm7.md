@@ -180,6 +180,15 @@
   - 다르게 들어간 항목: 없음 → 고칠 것 없음
   - Rio 샘플(`rio_base`, `rio_48V_1`, `rio_48V_5`, `rio_gian`)로 유닛 번호 대응을 확인하고 테스트로 남김. `rio_48V_5`는 Rio 5번이 아니라 **OMNI 5** 48V가 켜져 있어 Rio 포트 간격 확인에는 쓰지 못함
 
+### 4.6 읽기(10단계)에서 새로 확인한 것
+
+- **Mix의 스테레오** 🔬: `Mixing/Mix[n]/Signal/Relation`이 인풋 페어와 같이 L = `0x80`, R = `0x01`. 실제 공연 파일(IndieMusicDay MON)의 `IEM1 L`/`IEM1 R` … Mix 3/4 ~ 13/14에서 확인. Matrix도 같은 칸이 있으면 같은 방식으로 읽는다(샘플 없음 ❓). `BusType`은 모두 `VARI`.
+  - OnePatch 내보내기는 아직 이 칸을 쓰지 않는다(Bus Setup은 콘솔에서). 그래서 읽을 때는 Relation이 없으면 "홀수·짝수 Mix 이름이 같음"도 스테레오로 본다.
+- **Stereo B R 소스 = `0x04200011`** (관찰): DM Editor 기본 파일(`basic`)의 기본 출력 패치에서 Dante OUT 63 = `0x04200010`(Stereo B L), 64 = `0x04200011`. 직접 바꿔 저장한 샘플은 아직 없어 내보내기에는 쓰지 않고, 읽기와 표시에만 쓴다.
+- **기본 이름**: 인풋 `ch 1`~`ch 9`, `ch10`~; Mix `MX 1`/`MX10`; Matrix `MT 1`/`MT10`(V2)·`MT 10`(V1); Stereo `ST A`·`ST B`; `DCA 1`/`DCA10`; `Mute 1`/`Mute10`. 기본 컬러 `Blue`, 아이콘 `Blank`.
+- **기본 출력 패치**(`basic`): OMNI OUT 1–14 = Mix 1–14, 15/16 = Stereo A L/R, Dante OUT 1–48 = Mix 1–48, 49–60 = Matrix 1–12, 61/62 = Stereo A, 63/64 = Stereo B.
+- 실제 공연 파일의 인풋 49–72 패치 `0x06c000xx`(xx = 00, 01, 20, 21 … f0, f1)는 무엇인지 모름 ❓ (Dante·OMNI 외 — 녹음/USB 등으로 추정만). 읽을 때는 패치를 비운다.
+
 ## 5-1. 8-D 현장용 다듬기
 
 - **기준 파일 보관**: 한 번 올린 `.dmxf`를 IndexedDB(`consoleFiles`, 키 `dm7`)에 원본 바이트 그대로 보관 → 모든 Show에서 다시 올리지 않고 내보낸다. 기종·형식 버전·저장 시각(머리말)을 보여주고 교체·삭제한다.
@@ -188,6 +197,12 @@
 - **아이콘 자동**: 내 소스 목록의 소스·악기군 → 보컬 이름(무선이면 Wireless) → 이름 규칙 → 없으면 `Blank`. 관악·국악 관악·타악(장구·북)·퍼커션은 관찰된 아이콘이 없어 Blank.
 - **콘솔에서 직접 할 일** (`src/export/dm7/tasks.ts`, 인쇄 화면 “콘솔 할 일”): Dante 연결·UNIT ID, Name Language(한글 이름이 있을 때), 채널별 게인·HPF·EQ·다이내믹스, Bus Setup 스테레오, Aux 센드 Pre/Post, FX, Matrix 소스, Stereo B R, Scene 저장·백업.
 - **결과 요약**: 항목별로 넣은 수와 그중 파일과 달라 바뀐 수, 넣지 않는 것. 기준 파일의 다른 블록은 원래 압축 바이트 그대로(테스트로 확인).
+
+## 5-2. 10단계 쇼 파일 읽기
+
+- `src/export/dm7/dm7Import.ts`: 파일 → 기종 중립 스냅샷(채널·버스·DCA·뮤트). 위치는 모두 스키마로 계산.
+- `src/export/importShow.ts`: 스냅샷 → 새 Show(이름으로 소스 목록 찾기, 기본 이름 건너뛰기 선택), 기존 Show와 비교한 "콘솔 변경분"(고른 것만 반영, 마이크·스탠드·비고는 그대로).
+- 검증: 샘플 Show를 내보낸 파일을 다시 읽으면 콘솔로 가는 내용이 같고 변경분 0개(왕복 테스트). 실제 공연 파일(DM Editor 1.x)에서 36채널·스테레오 IEM 6개 Show가 만들어짐.
 
 ## 6. 남은 확인 사항
 

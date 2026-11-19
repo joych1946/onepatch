@@ -161,7 +161,7 @@ describe.skipIf(!haveOut)("DM7 아웃풋 패치 (샘플 필요)", () => {
     const plan = planDm7(show, load("basic"), { ...defaultDm7Options(show), items: onlyOut });
     const expected = current(parseDm7File(new Uint8Array(readFileSync(join(DIR, "outpatch3.dmxf")))));
     expect(Buffer.from(body(plan.current)).equals(Buffer.from(body(expected)))).toBe(true);
-    expect(plan.changes.map((c) => `${c.target} ${c.before} → ${c.after}`)).toEqual(["OMNI OUT 1 Mix 1 → Stereo B"]);
+    expect(plan.changes.map((c) => `${c.target} ${c.before} → ${c.after}`)).toEqual(["OMNI OUT 1 Mix 1 → Stereo B L"]);
   });
 
   it("쓰지 않는 출력 비우기: 박스 범위와 OMNI OUT만", () => {
