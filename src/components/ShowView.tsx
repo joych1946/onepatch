@@ -2,6 +2,7 @@
 
 /** Show 화면: 탭(인풋 / 아웃풋 / DCA·뮤트) + 아직 편집 화면이 없는 항목은 읽기 전용 보기 */
 import { useEffect, useState } from "react";
+import { routes } from "@/lib/routes";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Show } from "@/model/schema";
@@ -127,7 +128,7 @@ export default function ShowView({ id }: { id: string }) {
       else if (e.key === "i") setInfoOpen(true);
       else if (e.key === "F2") setEditingTitle(true);
       else if (e.key === "e") exportJson();
-      else if (e.key === "p" && show) router.push(`/shows/${show.id}/print`);
+      else if (e.key === "p" && show) router.push(routes.print(show.id));
       else return;
       e.preventDefault();
     };
@@ -215,10 +216,10 @@ export default function ShowView({ id }: { id: string }) {
         <button className={btn} onClick={doc.redo} disabled={!doc.canRedo} title="⇧⌘Z / Ctrl+Y">
           다시 실행
         </button>
-        <Link href={`/shows/${show.id}/console`} className={`${btn} self-center`} title="DM Editor 쇼 파일(.dmxf)에 인풋 설정 넣기">
+        <Link href={routes.console(show.id)} className={`${btn} self-center`} title="DM Editor 쇼 파일(.dmxf)에 인풋 설정 넣기">
           콘솔 내보내기
         </Link>
-        <Link href={`/shows/${show.id}/print`} className={`${btn} self-center`} title="인풋·아웃풋 리스트, 패치 시트, 집계표, 라벨, 엑셀 (P)">
+        <Link href={routes.print(show.id)} className={`${btn} self-center`} title="인풋·아웃풋 리스트, 패치 시트, 집계표, 라벨, 엑셀 (P)">
           출력·인쇄
         </Link>
         <button className={btn} onClick={() => setSavingTpl(true)} disabled={!lib.library} title="이 Show의 스테이지박스·아웃풋·DCA·인풋을 새 Show의 틀로 저장">

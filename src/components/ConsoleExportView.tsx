@@ -9,6 +9,7 @@
  * 기준 파일에서 OnePatch가 다루지 않는 내용(EQ, 다이내믹스, 씬 등)은 바이트 그대로 둔다.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
+import { routes } from "@/lib/routes";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Color } from "@/model/schema";
@@ -51,7 +52,7 @@ export default function ConsoleExportView({ id }: { id: string }) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented || isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       e.preventDefault();
-      router.push(`/shows/${id}`);
+      router.push(routes.show(id));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -175,7 +176,7 @@ export default function ConsoleExportView({ id }: { id: string }) {
       const cur = JSON.parse(localStorage.getItem(PRINT_KEY) ?? "{}");
       localStorage.setItem(PRINT_KEY, JSON.stringify({ ...cur, doc: "tasks" }));
     } catch {}
-    router.push(`/shows/${id}/print`);
+    router.push(routes.print(id));
   };
 
   if (doc.loadError) return <main className="p-6 whitespace-pre-wrap text-red-600">{doc.loadError}</main>;
@@ -219,7 +220,7 @@ export default function ConsoleExportView({ id }: { id: string }) {
   return (
     <main className="mx-auto w-full max-w-[1000px] space-y-5 p-4 text-sm sm:p-6">
       <header>
-        <Link href={`/shows/${show.id}`} className="text-neutral-500 hover:underline">
+        <Link href={routes.show(show.id)} className="text-neutral-500 hover:underline">
           ← {show.title} <kbd>Esc</kbd>
         </Link>
         <h1 className="mt-1 text-2xl font-bold">콘솔 내보내기 — {profile.name}</h1>
@@ -399,7 +400,7 @@ export default function ConsoleExportView({ id }: { id: string }) {
               c.kind === "issue" ? (
                 <li key={c.key}>
                   오류 검사: {c.message}{" "}
-                  <Link href={`/shows/${show.id}`} className="underline">
+                  <Link href={routes.show(show.id)} className="underline">
                     Show에서 고치기
                   </Link>
                 </li>

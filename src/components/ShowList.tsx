@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { routes } from "@/lib/routes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createEmptyShow, duplicateShow, newId } from "@/model/factory";
@@ -18,6 +19,7 @@ import { BUILTIN_SHOW_TEMPLATES, showFromTemplate } from "@/model/templates";
 import type { Show } from "@/model/schema";
 import { useLibrary } from "./useLibrary";
 import ChoiceSheet from "./ChoiceSheet";
+import { BackupBanner, PersistNotice, RestoreDialog, useBackup, useWelcome, Welcome } from "./DataCare";
 import { applyShowInfo, EDIT_TITLE_KEY } from "@/model/showInfo";
 
 type Notice = { kind: "info" | "error"; text: string; details?: string[] };
@@ -30,6 +32,7 @@ export default function ShowList() {
   const fileRef = useRef<HTMLInputElement>(null);
   const { library } = useLibrary();
   const [tplOpen, setTplOpen] = useState(false);
+  const welcome = useWelcome();
   /** 이름 바꾸는 중인 Show id */
   const [renaming, setRenaming] = useState<string | null>(null);
 
@@ -39,6 +42,7 @@ export default function ShowList() {
     if (selectId) setSelected(Math.max(0, list.findIndex((s) => s.id === selectId)));
     else setSelected((i) => Math.min(i, Math.max(0, list.length - 1)));
   }, []);
+  const bk = useBackup(() => void refresh(), setNotice);
 
   useEffect(() => {
     // 마운트 시 IndexedDB에서 목록을 한 번 불러온다
@@ -71,14 +75,20 @@ export default function ShowList() {
       await refresh(show.id);
       setNotice({ kind: "info", text: "샘플 Show를 추가했습니다." });
     },
-    open: (id: string) => router.push(`/shows/${id}`),
+    /** 첫 사용 안내: 샘플을 추가하고 바로 연다 */
+    openSample: async () => {
+      const show = createSampleShow();
+      await putShow(show);
+      router.push(routes.show(show.id));
+    },
+    open: (id: string) => router.push(routes.show(id)),
     /** 템플릿으로 만들고 바로 연다 */
     fromTemplate: async (show: Show) => {
       await putShow(show);
       try {
         sessionStorage.setItem(EDIT_TITLE_KEY, show.id);
       } catch {}
-      router.push(`/shows/${show.id}`);
+      router.push(routes.show(show.id));
     },
     duplicate: async (id: string) => {
       const show = await getShow(id);
@@ -127,7 +137,7 @@ export default function ShowList() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (tplOpen || renaming || isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (tplOpen || renaming || welcome.open || bk.pending || isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       const n = shows?.length ?? 0;
       switch (e.key) {
         case "ArrowDown":
@@ -156,6 +166,9 @@ export default function ShowList() {
           break;
         case "i":
           fileRef.current?.click();
+          break;
+        case "b":
+          void bk.backup();
           break;
         case "t":
           setTplOpen(true);
@@ -191,6 +204,14 @@ export default function ShowList() {
         <button className={btn} onClick={() => run(actions.addSample())}>
           샘플 추가
         </button>
+        <span className="mx-1 hidden h-5 w-px bg-neutral-300 sm:block dark:bg-neutral-700" />
+        <button className={btn} onClick={() => void bk.backup()} title="모든 Show, 내 라이브러리·템플릿, 콘솔 기준 파일을 파일 하나로 (B)">
+          전체 백업 <kbd>B</kbd>
+        </button>
+        <button className={btn} onClick={bk.pick} title="전체 백업 파일에서 합치기 또는 덮어쓰기">
+          백업 가져오기
+        </button>
+        {bk.input}
         <input
           ref={fileRef}
           type="file"
@@ -203,6 +224,9 @@ export default function ShowList() {
           }}
         />
       </header>
+
+      <BackupBanner status={bk.status} onBackup={() => void bk.backup()} />
+      <PersistNotice />
 
       {notice && (
         <div
@@ -239,15 +263,16 @@ export default function ShowList() {
           </button>
         </div>
       ) : (
+        <div className="overflow-x-auto">
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-neutral-300 text-left text-neutral-500 dark:border-neutral-700">
               <th className="py-2 pr-3 font-medium">공연명</th>
               <th className="py-2 pr-3 font-medium">날짜</th>
-              <th className="py-2 pr-3 font-medium">장소</th>
-              <th className="py-2 pr-3 font-medium">버전</th>
-              <th className="py-2 pr-3 text-right font-medium">In/Out</th>
-              <th className="py-2 pr-3 font-medium">수정</th>
+              <th className="hidden py-2 pr-3 font-medium sm:table-cell">장소</th>
+              <th className="hidden py-2 pr-3 font-medium sm:table-cell">버전</th>
+              <th className="hidden py-2 pr-3 text-right font-medium sm:table-cell">In/Out</th>
+              <th className="hidden py-2 pr-3 font-medium md:table-cell">수정</th>
               <th className="py-2" />
             </tr>
           </thead>
@@ -262,7 +287,7 @@ export default function ShowList() {
                   i === selected ? "bg-blue-50 dark:bg-blue-950" : ""
                 }`}
               >
-                <td className="py-2 pr-3 font-medium">
+                <td className="min-w-[9rem] py-2 pr-3 font-medium">
                   {renaming === s.id ? (
                     <RenameInput
                       initial={s.title}
@@ -275,13 +300,13 @@ export default function ShowList() {
                     s.title
                   )}
                 </td>
-                <td className="py-2 pr-3 tabular-nums">{s.date || "—"}</td>
-                <td className="py-2 pr-3">{s.venue || "—"}</td>
-                <td className="py-2 pr-3">{s.version}</td>
-                <td className="py-2 pr-3 text-right tabular-nums">
+                <td className="py-2 pr-3 whitespace-nowrap tabular-nums">{s.date || "—"}</td>
+                <td className="hidden py-2 pr-3 sm:table-cell">{s.venue || "—"}</td>
+                <td className="hidden py-2 pr-3 sm:table-cell">{s.version}</td>
+                <td className="hidden py-2 pr-3 text-right tabular-nums sm:table-cell">
                   {s.inputCount}/{s.outputCount}
                 </td>
-                <td className="py-2 pr-3 tabular-nums text-neutral-500">
+                <td className="hidden py-2 pr-3 tabular-nums text-neutral-500 md:table-cell">
                   {new Date(s.updatedAt).toLocaleString("ko-KR", {
                     dateStyle: "short",
                     timeStyle: "short",
@@ -311,13 +336,28 @@ export default function ShowList() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
 
       <p className="mt-6 text-xs text-neutral-500">
         <kbd>↑</kbd>
         <kbd>↓</kbd> 선택 · <kbd>Enter</kbd> 열기 · <kbd>F2</kbd> 이름 바꾸기 · <kbd>D</kbd> 복제 · <kbd>Delete</kbd> 삭제
-        · <kbd>N</kbd> 새 Show · <kbd>T</kbd> 템플릿으로 새 Show · <kbd>I</kbd> 가져오기 — 데이터는 이 브라우저에만 저장됩니다.
+        · <kbd>N</kbd> 새 Show · <kbd>T</kbd> 템플릿으로 새 Show · <kbd>I</kbd> 가져오기 · <kbd>B</kbd> 전체 백업 — 데이터는 이 브라우저에만 저장됩니다.{" "}
+        <button className="underline" onClick={welcome.show}>
+          처음 사용 안내
+        </button>
       </p>
+
+      {welcome.open && (
+        <Welcome
+          onClose={welcome.close}
+          onSample={() => {
+            welcome.close();
+            run(actions.openSample());
+          }}
+        />
+      )}
+      {bk.pending && <RestoreDialog pending={bk.pending} onRestore={(m) => void bk.restore(m)} onClose={() => bk.setPending(null)} />}
 
       {tplOpen && (
         <ChoiceSheet

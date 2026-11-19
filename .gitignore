@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 빌드 때 만드는 서비스 워커 (scripts/build-sw.mjs)
+/public/sw.js

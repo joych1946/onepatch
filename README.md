@@ -1,36 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OnePatch
 
-## Getting Started
+공연 음향 준비용 웹앱. 인풋리스트를 데이터로 한 번 입력하면 크루 배포용 문서(인풋·아웃풋 리스트, 패치 시트,
+장비 집계표, 라벨, 콘솔 할 일)와 콘솔 파일(Yamaha DM7 쇼 파일 `.dmxf`)이 나온다.
 
-First, run the development server:
+- Next.js(App Router) + TypeScript + Tailwind CSS, 데이터는 브라우저 IndexedDB
+- 서버·데이터베이스·환경 변수·유료 서비스 없음
+
+## ⚠️ 데이터는 브라우저(주소별)에 저장된다
+
+- Show, 내 장비·소스, 내 템플릿, DM7 기준 파일은 **그 브라우저의 그 주소(도메인)** 에만 저장된다.
+  다른 기기·다른 브라우저·다른 주소에서는 보이지 않는다.
+- **배포 주소를 바꾸기 전에**(Vercel 프로젝트 이름 변경, 도메인 연결·변경 등) 지금 쓰는 주소에서
+  목록 화면의 **전체 백업**(`B`)으로 파일을 받아 두고, 새 주소에서 **백업 가져오기**로 옮긴다.
+- 기기를 옮길 때도 같다: 전체 백업 → 새 기기에서 백업 가져오기(합치기 / 덮어쓰기).
+- 브라우저가 저장 공간을 정리하며 데이터를 지울 수 있다. 앱이 영구 저장을 요청하고, 허용되지 않으면 목록 화면에 안내한다.
+  홈 화면에 추가(설치)하면 대부분 허용된다. 그래도 전체 백업 파일을 다른 곳(클라우드·USB)에 함께 보관할 것.
+
+## 현장 사용
+
+- **오프라인**: 한 번 열어 본 뒤에는 인터넷이 없어도 열리고 편집·인쇄(PDF 저장)·엑셀·DM7 내보내기가 된다.
+  (`public/sw.js` 서비스 워커가 첫 방문 때 모든 페이지와 파일을 미리 저장한다.)
+- **홈 화면에 추가**: iPhone·iPad는 Safari 공유 → 홈 화면에 추가, Android·PC Chrome은 주소창의 설치 아이콘.
+- **새 버전**: 새로 배포되면 화면 오른쪽 아래에 "새 버전이 있습니다. 새로고침"이 뜬다. 누르면 바뀐다(편집 중인 내용은 자동 저장되어 있음).
+
+## 배포 (Vercel, 무료 Hobby)
+
+1. vercel.com에서 GitHub 저장소 `onepatch`를 Import (Framework: Next.js, 설정은 기본값 그대로)
+2. 환경 변수: 없음
+3. 빌드 명령: 기본값(`npm run build`). `prebuild`가 서비스 워커(`public/sw.js`)를 만들고, 커밋 SHA를 버전으로 넣는다.
+4. 이후 `main`에 푸시하면 자동으로 다시 배포된다.
+
+배포 후 확인: 주소 직접 입력·새로고침(`/show?id=…`, `/show/print?id=…`), 비행기 모드에서 다시 열기, 홈 화면에 추가.
+예전 주소 `/shows/<id>`는 새 주소로 넘어간다.
+
+## 개발
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev          # http://localhost:3000 (개발 중에는 서비스 워커를 쓰지 않음)
+npm test             # vitest
+npm run typecheck
+npm run lint
+npm run build && npx next start -p 3100   # 오프라인 동작은 빌드한 앱에서 확인
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+DM7 쇼 파일 형식 조사: `docs/research/dm7.md`. 검증용 샘플은 저장소 밖 `~/Documents/vender/dm7`(없으면 해당 테스트는 건너뜀).

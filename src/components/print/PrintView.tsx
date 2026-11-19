@@ -5,6 +5,7 @@
  * 미리보기의 쪽 구성이 그대로 인쇄된다 (쪽 나누기는 components/print/Paged).
  */
 import { useEffect, useMemo, useState } from "react";
+import { routes } from "@/lib/routes";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Show } from "@/model/schema";
@@ -129,7 +130,7 @@ export default function PrintView({ id }: { id: string }) {
       // Esc: Show 화면으로 돌아가기 (Show 화면에서 P로 들어온 것의 반대)
       if (e.key === "Escape") {
         e.preventDefault();
-        router.push(`/shows/${id}`);
+        router.push(routes.show(id));
         return;
       }
       const n = parseInt(e.key, 10);
@@ -257,7 +258,7 @@ export default function PrintView({ id }: { id: string }) {
       <style>{`@page { size: A4 ${doc.orientation}; margin: 0; }`}</style>
       <div className="no-print sticky top-0 z-10 space-y-2 border-b border-neutral-300 bg-white/95 p-3 text-sm backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/95">
         <div className="flex flex-wrap items-center gap-2">
-          <Link href={`/shows/${show.id}`} className="text-neutral-500 hover:underline">
+          <Link href={routes.show(show.id)} className="text-neutral-500 hover:underline">
             ← {show.title} <kbd>Esc</kbd>
           </Link>
           <span className="mx-1 h-4 w-px bg-neutral-300" />
