@@ -28,7 +28,14 @@ interface Backend {
  */
 type Access = "private" | "public";
 let access: Access = process.env.ONEPATCH_BLOB_ACCESS === "public" ? "public" : "private";
-const accessProblem = (e: unknown) => /public|private|access/i.test(e instanceof Error ? e.message : String(e)) && !/token/i.test(String(e));
+/**
+ * 저장소 종류가 맞지 않을 때의 오류: 쓰기는 "private/public/access" 문구, 읽기는 주소가 달라
+ * "Failed to fetch blob: 400/403"으로 온다. (서버 인스턴스마다 기억이 따로라 읽기에서 자주 생김)
+ */
+const accessProblem = (e: unknown) => {
+  const m = e instanceof Error ? e.message : String(e);
+  return (/public|private|access/i.test(m) && !/token/i.test(m)) || /Failed to fetch blob: 40[03]/.test(m);
+};
 async function withAccess<T>(fn: (a: Access) => Promise<T>): Promise<T> {
   try {
     return await fn(access);
