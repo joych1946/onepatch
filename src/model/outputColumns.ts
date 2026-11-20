@@ -238,6 +238,8 @@ export function busColumns(kind: BusKind): SheetColumn<OutputBus>[] {
     label: "물리 출력",
     aliases: ["port", "ports", "output", "out", "patch", "물리출력", "출력", "출력포트", "포트", "패치"],
     width: "min-w-36",
+    // 누르거나 Space: 포트 선택 창 (L/R 따로). Enter나 바로 입력하면 글자로 ("Rio1608 5, OMNI 3")
+    pick: true,
     text: (s, b) => formatOutPorts(s, b.ports),
     set: (show, i, text) => up(show, i, { ports: parseOutPorts(show, kind, i, text) }),
   };

@@ -280,3 +280,50 @@ export function boxColumns(): SheetColumn<StageBox>[] {
     },
   ];
 }
+
+/* ───────────── 아웃풋 물리 출력 고르기 ───────────── */
+
+export type OutPortChoice = { ref: PortRef; label: string; group: string; users: string[] };
+
+const busTag = (b: OutputBus, side: number) =>
+  `${b.kind === "aux" ? "Aux" : b.kind === "matrix" ? "Mtx" : "Main"} ${b.number}${b.width === "stereo" ? (side === 0 ? " L" : side === 1 ? " R" : "") : ""}`;
+
+/**
+ * 고를 수 있는 물리 출력: 모든 박스의 모든 출력 포트 + 콘솔 본체(OMNI OUT) + 쓰고 있는 Dante 직결.
+ * 다른 버스가 쓰는 포트도 고를 수 있다(겹치면 오류 검사가 알려 줌). users에 지금 쓰는 버스를 적는다.
+ */
+export function outPortChoices(show: Show, exceptBusId?: string): OutPortChoice[] {
+  const users = new Map<string, string[]>();
+  const key = (p: PortRef) => (p.kind === "other" ? `o:${p.label}` : `${groupOf(p)}:${p.port}`);
+  for (const b of show.outputs)
+    b.ports.forEach((p, side) => {
+      if (b.id === exceptBusId) return;
+      users.set(key(p), [...(users.get(key(p)) ?? []), busTag(b, side)]);
+    });
+  const out: OutPortChoice[] = [];
+  const push = (ref: PortRef, group: string) => out.push({ ref, label: formatOutLabel(show, ref), group, users: users.get(key(ref)) ?? [] });
+  for (const b of show.stageBoxes) for (let n = 1; n <= b.outputs; n++) push(refAt(b.id, n), b.name);
+  const omniMax = Math.max(OMNI_LIST, ...show.outputs.flatMap((b) => b.ports.flatMap((p) => (p.kind === "local" ? [p.port] : []))));
+  for (let n = 1; n <= omniMax; n++) push(refAt(OMNI_BOX, n), "콘솔 본체 (OMNI OUT)");
+  const dante = [...new Set(show.outputs.flatMap((b) => b.ports.flatMap((p) => (p.kind === "dante" ? [p.port] : []))))].sort((a, b) => a - b);
+  for (const n of dante) push(refAt(DANTE_BOX, n), "Dante 직결");
+  return out;
+}
+
+function formatOutLabel(show: Show, p: PortRef): string {
+  if (p.kind === "stagebox") return `${show.stageBoxes.find((b) => b.id === p.stageBoxId)?.name ?? "?"} ${p.port}`;
+  if (p.kind === "local") return `OMNI ${p.port}`;
+  if (p.kind === "dante") return `Dante ${p.port}`;
+  return p.label;
+}
+
+/**
+ * 버스의 출력 중 side번째(스테레오 0 = L, 1 = R, 모노 0)를 바꾼다. ref가 null이면 그 자리를 비운다.
+ * 출력은 빈칸 없는 목록이라, L을 비우고 R만 남기면 남은 출력이 첫 번째(L 자리)가 된다.
+ */
+export function setPortAt(ports: PortRef[], side: number, ref: PortRef | null): PortRef[] {
+  const list: (PortRef | null)[] = ports.slice();
+  while (list.length <= side) list.push(null);
+  list[side] = ref;
+  return list.filter((p): p is PortRef => p !== null);
+}

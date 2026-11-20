@@ -22,7 +22,8 @@ type Pos = { r: number; c: number };
 type Edit = { mode: "enter" | "edit"; text: string; sug: number; start: string | null };
 
 export interface SheetHandle {
-  focus(where: "top" | "bottom"): void;
+  /** here: 지금 칸 그대로 (선택 창을 닫고 돌아올 때) */
+  focus(where: "top" | "bottom" | "here"): void;
 }
 
 interface Props<T> {
@@ -162,7 +163,7 @@ export default function Sheet<T>({
   useImperativeHandle(handle, () => ({
     focus(where) {
       // 위 표에서 ↓로 오면 맨 윗행, 아래 표에서 ↑로 오면 맨 아래(새 항목) 행
-      moveTo(where === "top" ? 0 : n, a.c);
+      if (where !== "here") moveTo(where === "top" ? 0 : n, a.c);
       wantFocus.current = true;
       requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
     },
@@ -478,7 +479,8 @@ export default function Sheet<T>({
   const openPick = (r: number, colKey: string) => {
     if (editRef.current) commit(editRef.current.text, false);
     // 빈 행이면 선택 창이 고를 때 새 항목을 만든다
-    moveTo(r, a.c);
+    const c = columns.findIndex((col) => col.key === colKey);
+    moveTo(r, c >= 0 ? c : a.c);
     wantFocus.current = false;
     onPick?.(r, colKey);
   };

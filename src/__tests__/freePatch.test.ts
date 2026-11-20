@@ -73,7 +73,7 @@ describe("스테이지박스 포트 자유 설정 (5번)", () => {
     const before = s.inputs.map((_, i) => s.inputs[i].port);
     s = setBoxCell(s, 0, "name", "SL Rio");
     s = setBoxCell(s, 0, "location", "무대 하수");
-    s = boxOps.move(s, 0, 0, 2).show;
+    s = boxOps.move(s, 0, 0, 2, false).show;
     expect(s.inputs.map((c) => c.port)).toEqual(before);
     expect(portText(s, 0)).toBe("SL Rio 1");
     const id = s.stageBoxes.find((b) => b.name === "SL Rio")!.id;
@@ -104,3 +104,40 @@ describe.skipIf(!existsSync(BASIC))("DM7 내보내기: 박스 없는 포트 (샘
     expect(plan.changes.some((c) => c.item === "outPatch" && c.target === "Dante OUT 70")).toBe(true);
   });
 });
+
+import { outPortChoices, setPortAt } from "@/model/patch";
+import { busesOf, updateBus } from "@/model/outputOps";
+import { formatOutPorts } from "@/model/outputColumns";
+
+describe("아웃풋 물리 출력 자유 지정 (6번)", () => {
+  it("Aux 1을 두 번째 박스의 출력 5번으로 지정했다가 비운다", () => {
+    const s0 = createSampleShow();
+    const second = s0.stageBoxes[1];
+    const pick = outPortChoices(s0, busesOf(s0, "aux")[0].id).find((c) => c.label === `${second.name} 5`)!;
+    expect(pick).toBeDefined();
+    const s1 = updateBus(s0, "aux", 0, { ports: setPortAt(busesOf(s0, "aux")[0].ports, 0, pick.ref) });
+    expect(formatOutPorts(s1, busesOf(s1, "aux")[0].ports)).toBe(`${second.name} 5`);
+    const s2 = updateBus(s1, "aux", 0, { ports: setPortAt(busesOf(s1, "aux")[0].ports, 0, null) });
+    expect(busesOf(s2, "aux")[0].ports).toEqual([]);
+    expect(parseShow(s2).ok).toBe(true);
+  });
+
+  it("고를 수 있는 출력: 모든 박스의 모든 출력 + OMNI OUT, 다른 버스가 쓰는 포트는 표시", () => {
+    const s = createSampleShow();
+    const list = outPortChoices(s);
+    const total = s.stageBoxes.reduce((n, b) => n + b.outputs, 0);
+    expect(list.filter((c) => c.ref.kind === "stagebox")).toHaveLength(total);
+    expect(list.some((c) => c.label === "OMNI 1" && c.group.includes("OMNI"))).toBe(true);
+    expect(list.find((c) => c.label === "Rio3224 1")!.users).toEqual(["Aux 1"]);
+  });
+
+  it("스테레오 L·R을 따로 바꾸기", () => {
+    const L: PortRefT = { kind: "local", port: 3 };
+    const R: PortRefT = { kind: "dante", port: 70 };
+    const start: PortRefT[] = [{ kind: "local", port: 1 }, { kind: "local", port: 2 }];
+    expect(setPortAt(start, 1, R)).toEqual([start[0], R]);
+    expect(setPortAt(start, 0, L)).toEqual([L, start[1]]);
+    expect(setPortAt([], 1, R)).toEqual([R]); // L이 비어 있으면 첫 자리로
+  });
+});
+type PortRefT = import("@/model/schema").PortRef;

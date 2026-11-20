@@ -9,6 +9,7 @@ import { busColumns, busIssueCell } from "@/model/outputColumns";
 import { applyPreset, BUS_PRESETS, presetName, suggestNextPresets, type BusPreset } from "@/model/busPresets";
 import { norm } from "@/model/text";
 import Sheet, { type SheetHandle } from "./Sheet";
+import OutPortPicker from "./OutPortPicker";
 import ChoiceSheet, { type ChoiceItem, type ChoiceSection } from "./ChoiceSheet";
 import type { ValidationIssue } from "./useShowDoc";
 
@@ -31,6 +32,8 @@ interface Props {
 
 export default function OutputsView({ show, apply, undo, redo, renumber, issues, onMessage, focusRequest }: Props) {
   const [picker, setPicker] = useState<{ kind: BusKind; row: number } | null>(null);
+  /** 물리 출력 선택 창 */
+  const [portPicker, setPortPicker] = useState<{ kind: BusKind; row: number } | null>(null);
   const handles = useRef<Record<BusKind, SheetHandle | null>>({ aux: null, matrix: null, main: null });
 
   const issueMaps = useMemo(() => {
@@ -73,7 +76,7 @@ export default function OutputsView({ show, apply, undo, redo, renumber, issues,
               renumber={renumber}
               issues={issueMaps[kind]}
               onMessage={onMessage}
-              onPick={(row) => setPicker({ kind, row })}
+              onPick={(row, col) => (col === "ports" ? row < rows.length && setPortPicker({ kind, row }) : setPicker({ kind, row }))}
               onExit={(dir) => {
                 const next = KINDS[k + dir];
                 if (next) handles.current[next.kind]?.focus(dir > 0 ? "top" : "bottom");
@@ -82,13 +85,27 @@ export default function OutputsView({ show, apply, undo, redo, renumber, issues,
                 handles.current[kind] = h;
               }}
               autoFocus={k === 0}
-              paused={picker !== null}
+              paused={picker !== null || portPicker !== null}
               focusRequest={focusRequest?.kind === kind ? focusRequest : null}
-              activeRow={picker?.kind === kind ? picker.row : null}
+              activeRow={picker?.kind === kind ? picker.row : portPicker?.kind === kind ? portPicker.row : null}
             />
           </section>
         );
       })}
+
+      {portPicker && (
+        <OutPortPicker
+          show={show}
+          kind={portPicker.kind}
+          row={portPicker.row}
+          apply={apply}
+          onClose={() => {
+            const k = portPicker.kind;
+            setPortPicker(null);
+            requestAnimationFrame(() => handles.current[k]?.focus("here"));
+          }}
+        />
+      )}
 
       {picker && (
         <BusPicker
