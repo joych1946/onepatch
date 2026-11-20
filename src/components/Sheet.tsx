@@ -52,6 +52,8 @@ interface Props<T> {
   activeRow?: number | null;
   /** 이 칸으로 이동하고 포커스 (오류 검사 패널에서 클릭). n이 바뀔 때마다 */
   focusRequest?: { row: number; col: string; n: number } | null;
+  /** 행을 지우기 전에 물어볼 말 (없으면 바로 지움). 예: 박스를 지우면 비워지는 패치 */
+  confirmRemove?: (show: Show, from: number, to: number) => string | null;
 }
 
 export default function Sheet<T>({
@@ -74,6 +76,7 @@ export default function Sheet<T>({
   paused,
   activeRow,
   focusRequest,
+  confirmRemove,
 }: Props<T>) {
   const n = rows.length;
   const rowCount = n + 1;
@@ -258,6 +261,8 @@ export default function Sheet<T>({
     remove: () => {
       if (!selRows.length) return;
       const [f, t] = [selRows[0], selRows[selRows.length - 1]];
+      const ask = confirmRemove?.(show, f, t);
+      if (ask && !window.confirm(ask)) return;
       change((s) => ops.remove(s, f, t, renumber));
       moveTo(f, a.c);
     },

@@ -141,6 +141,8 @@ function portTarget(show: Show, port: PortRef | null, opts: Dm7Options): PortTar
     if (port.port > DM7_OMNI_COUNT) return "unmapped";
     return { source: OMNI_BASE + port.port - 1, label: `OMNI ${port.port}`, phantom: { kind: "omni", port: port.port } };
   }
+  // Dante 직결: 콘솔의 Dante 입력 번호 그대로. 48V는 장치 쪽이라 다루지 않는다.
+  if (port.kind === "dante") return { source: DANTE_BASE + port.port - 1, label: `Dante ${port.port}`, phantom: null };
   const s = opts.boxes[port.stageBoxId];
   if (!s?.danteStart) return "unmapped";
   const n = s.danteStart + port.port - 1;
@@ -402,6 +404,7 @@ function planOutputs({ show, cur, P, record, warn, note }: OutCtx, processing: M
   const danteCount = locate(processing, ["Dante", "OutputPort"]).node.count;
   const portRef = (p: PortRef): { sec: "Omni" | "Dante"; index: number; label: string } | null => {
     if (p.kind === "local") return p.port <= omniCount ? { sec: "Omni", index: p.port - 1, label: `OMNI OUT ${p.port}` } : null;
+    if (p.kind === "dante") return p.port <= danteCount ? { sec: "Dante", index: p.port - 1, label: `Dante OUT ${p.port}` } : null;
     if (p.kind === "stagebox") {
       const start = opts.boxes[p.stageBoxId]?.danteOutStart;
       if (!start) return null;

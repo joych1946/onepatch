@@ -10,7 +10,7 @@ import { useMemo, useRef, useState } from "react";
 import type { Show } from "@/model/schema";
 import type { Library } from "@/model/library";
 import { createEmptyShow } from "@/model/factory";
-import { COLOR_LABEL } from "@/model/labels";
+import { COLOR_LABEL, formatPort } from "@/model/labels";
 import { parseDm7File, Dm7FormatError, type Dm7File } from "@/export/dm7/container";
 import { defaultDm7Options, type Dm7Options } from "@/export/dm7/dm7Export";
 import { readDm7, type ConsoleSnapshot } from "@/export/dm7/dm7Import";
@@ -24,7 +24,7 @@ async function readFile(f: File): Promise<Dm7File> {
 }
 const errText = (e: unknown) => (e instanceof Dm7FormatError ? e.message : `파일을 읽지 못했습니다: ${e instanceof Error ? e.message : String(e)}`);
 const portText = (show: Show, p: Show["inputs"][number]["port"]) =>
-  !p ? "—" : p.kind === "local" ? `Local ${p.port}` : p.kind === "stagebox" ? `${show.stageBoxes.find((b) => b.id === p.stageBoxId)?.name ?? "박스"} ${p.port}` : p.label;
+  formatPort(p, show.stageBoxes);
 
 /* ───────────── 새 Show ───────────── */
 

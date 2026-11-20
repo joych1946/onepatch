@@ -11,7 +11,7 @@ import { newChannel } from "@/model/inputOps";
 import { busesOf, newBus } from "@/model/outputOps";
 import { findPreset } from "@/model/busPresets";
 import { resolvePhantom } from "@/model/derive";
-import { COLOR_LABEL } from "@/model/labels";
+import { COLOR_LABEL, formatPort } from "@/model/labels";
 import { norm } from "@/model/text";
 import { consoleColor } from "./profile";
 import type { ConsoleSnapshot, SnapshotBus, SnapshotChannel } from "./dm7/dm7Import";
@@ -65,7 +65,7 @@ export interface ImportOptions {
 }
 
 const portKey = (p: PortRef | null | undefined) =>
-  !p ? "" : p.kind === "stagebox" ? `b:${p.stageBoxId}:${p.port}` : p.kind === "local" ? `l:${p.port}` : `o:${p.label}`;
+  !p ? "" : p.kind === "stagebox" ? `b:${p.stageBoxId}:${p.port}` : p.kind === "local" ? `l:${p.port}` : p.kind === "dante" ? `d:${p.port}` : `o:${p.label}`;
 const samePort = (a: PortRef | null | undefined, b: PortRef | null | undefined) => portKey(a) === portKey(b);
 
 function busFrom(b: SnapshotBus, number: number, keepName?: string): OutputBus {
@@ -145,7 +145,7 @@ export interface ImportChange {
 }
 
 const portText = (show: Show, p: PortRef | null | undefined) =>
-  !p ? "없음" : p.kind === "local" ? `Local ${p.port}` : p.kind === "stagebox" ? `${show.stageBoxes.find((b) => b.id === p.stageBoxId)?.name ?? "박스"} ${p.port}` : p.label;
+  !p ? "없음" : formatPort(p, show.stageBoxes);
 const list = (n: number[]) => (n.length ? n.join(", ") : "—");
 const fit = (s: string, max: number) => [...s.trim()].slice(0, max).join("").trimEnd();
 

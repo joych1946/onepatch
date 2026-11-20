@@ -3,7 +3,7 @@
  * 인풋 그리드처럼 "표시 텍스트 ↔ 데이터" 변환을 열마다 가져, 키보드 입력과 엑셀 붙여넣기가 같은 결과를 낸다.
  */
 import { BUS_PRESETS } from "./busPresets";
-import { matchStageBox } from "./inputColumns";
+import { DANTE_PREFIX, LOCAL_PREFIX, matchStageBox } from "./inputColumns";
 import { BUS_PURPOSE_LABEL, formatPort } from "./labels";
 import {
   busesOf,
@@ -82,8 +82,9 @@ export function parseOutPorts(show: Show, kind: BusKind, index: number, text: st
     }
     const p = norm(prefix);
     const ports = Array.from({ length: Math.min(b - a, 63) + 1 }, (_, i) => a + i).filter((x) => x >= 1);
-    if (/^(l|local|lo|로컬|콘솔|omni)$/.test(p)) {
-      out.push(...ports.map((port) => ({ kind: "local" as const, port })));
+    if (LOCAL_PREFIX.test(p) || DANTE_PREFIX.test(p)) {
+      const k = LOCAL_PREFIX.test(p) ? ("local" as const) : ("dante" as const);
+      out.push(...ports.map((port) => ({ kind: k, port })));
       continue;
     }
     const box = p ? matchStageBox(show, p) : show.stageBoxes.find((x) => x.id === lastBox);
@@ -97,7 +98,7 @@ export function parseOutPorts(show: Show, kind: BusKind, index: number, text: st
   return out;
 }
 
-/** 포트 목록 → "Rio3224 5-6", "Rio3224 5, 7", "Local 1-2" */
+/** 포트 목록 → "Rio3224 5-6", "Rio3224 5, 7", "OMNI 1-2", "Dante 9" */
 export function formatOutPorts(show: Show, ports: PortRef[]): string {
   const parts: string[] = [];
   let i = 0;
@@ -115,7 +116,7 @@ export function formatOutPorts(show: Show, ports: PortRef[]): string {
       nums.push((ports[i] as { port: number }).port);
       i++;
     }
-    const head = p.kind === "local" ? "Local" : (show.stageBoxes.find((b) => b.id === p.stageBoxId)?.name ?? "?");
+    const head = p.kind === "local" ? "OMNI" : p.kind === "dante" ? "Dante" : (show.stageBoxes.find((b) => b.id === p.stageBoxId)?.name ?? "?");
     const ranges: string[] = [];
     for (let k = 0; k < nums.length; k++) {
       let j = k;

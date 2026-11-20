@@ -40,12 +40,14 @@ export const ColorSchema = z.enum([
 /**
  * 물리 포트 위치. 인풋(소스가 꽂히는 곳)과 아웃풋(신호가 나가는 곳)이 같은 구조를 쓴다.
  * - stagebox: Show에 등록된 스테이지박스의 n번 포트
- * - local:    콘솔 본체의 로컬 단자 (예: 토크백 마이크, 레코더 출력)
- * - other:    그 외 (Dante 직결, 프로세서 등) — 자유 텍스트
+ * - local:    콘솔 본체의 로컬 단자 (화면 표기 "OMNI n" — 토크백 마이크, 레코더 출력 등)
+ * - dante:    스테이지박스 없이 콘솔의 n번 Dante 입력/출력에 바로 (Dante 직결 장비)
+ * - other:    그 외 (프로세서 등) — 자유 텍스트
  */
 export const PortRefSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("stagebox"), stageBoxId: Id, port: PositiveInt }),
   z.object({ kind: z.literal("local"), port: PositiveInt }),
+  z.object({ kind: z.literal("dante"), port: PositiveInt }),
   z.object({ kind: z.literal("other"), label: z.string() }),
 ]);
 
@@ -274,9 +276,15 @@ export function checkShow(show: z.infer<typeof ShowObjectSchema>, opts: CheckOpt
   const channelNumbers = new Set(show.inputs.map((c) => c.number));
 
   const portName = (p: z.infer<typeof PortRefSchema>) =>
-    p.kind === "stagebox" ? `${boxes.get(p.stageBoxId)?.name ?? "?"} ${p.port}` : p.kind === "local" ? `Local ${p.port}` : p.label;
+    p.kind === "stagebox"
+      ? `${boxes.get(p.stageBoxId)?.name ?? "?"} ${p.port}`
+      : p.kind === "local"
+        ? `OMNI ${p.port}`
+        : p.kind === "dante"
+          ? `Dante ${p.port}`
+          : p.label;
   const portKey = (p: z.infer<typeof PortRefSchema>) =>
-    p.kind === "stagebox" ? `${p.stageBoxId}:${p.port}` : p.kind === "local" ? `local:${p.port}` : null;
+    p.kind === "stagebox" ? `${p.stageBoxId}:${p.port}` : p.kind === "other" ? null : `${p.kind}:${p.port}`;
 
   const checkPort = (
     port: z.infer<typeof PortRefSchema>,

@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import type { Show, StageBox } from "@/model/schema";
 import { COLOR_SWATCH } from "@/model/labels";
-import { autoPatch, boxColumns, boxOps, boxUsage, swapPorts, type PortAddr } from "@/model/patch";
+import { autoPatch, boxColumns, boxOps, boxRemovalLoss, boxUsage, DANTE_BOX, OMNI_BOX, swapPorts, type PortAddr } from "@/model/patch";
 import { formatRanges, parseRanges } from "@/model/outputOps";
 import Sheet from "./Sheet";
 import type { ValidationIssue } from "./useShowDoc";
@@ -31,7 +31,7 @@ export default function PatchView({ show, apply, undo, redo, issues, onMessage, 
       <section>
         <div className="mb-2 flex flex-wrap items-baseline gap-3">
           <h2 className="text-base font-semibold">스테이지박스 ({show.stageBoxes.length})</h2>
-          <p className="text-xs text-neutral-500">맨 아래 빈 행에 입력하면 박스 추가 · ⌥⌫ 삭제(그 박스의 패치도 비워짐)</p>
+          <p className="text-xs text-neutral-500">맨 아래 빈 행에 입력하면 박스 추가 · 인풋·아웃풋 수는 아무 숫자나 · 이름·위치·순서를 바꿔도 패치는 그대로 · ⌥⌫ 삭제(비워지는 패치가 있으면 먼저 알려줌)</p>
         </div>
         <Sheet
           label="스테이지박스"
@@ -48,6 +48,13 @@ export default function PatchView({ show, apply, undo, redo, issues, onMessage, 
           onMessage={onMessage}
           autoFocus
           focusRequest={focusRequest}
+          confirmRemove={(s, from, to) => {
+            const ids = s.stageBoxes.slice(from, to + 1).map((b) => b.id);
+            const loss = boxRemovalLoss(s, ids);
+            if (!loss.length) return null;
+            const shown = loss.slice(0, 15).join("\n");
+            return `박스를 지우면 아래 ${loss.length}개의 패치가 비워집니다.\n\n${shown}${loss.length > 15 ? `\n… 외 ${loss.length - 15}개` : ""}\n\n지울까요? (⌘Z로 되돌릴 수 있습니다)`;
+          }}
         />
       </section>
 
@@ -153,7 +160,12 @@ function PatchBoard({ show, apply }: Pick<Props, "show" | "apply">) {
     setPicked(null);
   };
 
-  const boxName = (id: string) => show.stageBoxes.find((b) => b.id === id)?.name ?? "?";
+  // 박스 없는 포트: 콘솔 본체 단자(OMNI)는 늘, Dante 직결은 쓰고 있을 때만 (그리드에 "Dante 33"처럼 입력)
+  const omni: StageBox = { id: OMNI_BOX, name: "콘솔 본체 (OMNI)", inputs: 16, outputs: 16, location: "박스 없이 콘솔에 바로" };
+  const dante: StageBox = { id: DANTE_BOX, name: "Dante 직결", inputs: 0, outputs: 0, location: "박스 없이 콘솔의 Dante 번호로 — 인풋 표에 “Dante 33”처럼 입력" };
+  const danteUsed = boxUsage(show, DANTE_BOX);
+  const virtual = [omni, ...(danteUsed.ins.size || danteUsed.outs.size ? [dante] : [])];
+  const boxName = (id: string) => [...show.stageBoxes, ...virtual].find((b) => b.id === id)?.name ?? "?";
 
   return (
     <section data-esc-layer={picked ? "" : undefined}>
@@ -169,6 +181,9 @@ function PatchBoard({ show, apply }: Pick<Props, "show" | "apply">) {
         {show.stageBoxes.map((box) => (
           <BoxCard key={box.id} show={show} box={box} picked={picked} dropOn={dropOn} setDropOn={setDropOn} onPress={press} onSwap={swap} />
         ))}
+        {virtual.map((box) => (
+          <BoxCard key={box.id} show={show} box={box} virtual picked={picked} dropOn={dropOn} setDropOn={setDropOn} onPress={press} onSwap={swap} />
+        ))}
       </div>
     </section>
   );
@@ -177,6 +192,7 @@ function PatchBoard({ show, apply }: Pick<Props, "show" | "apply">) {
 function BoxCard({
   show,
   box,
+  virtual,
   picked,
   dropOn,
   setDropOn,
@@ -185,6 +201,8 @@ function BoxCard({
 }: {
   show: Show;
   box: StageBox;
+  /** 박스 없는 포트 묶음: 포트 수 제한이 없고, 쓰는 포트 + 기본 칸 수만큼 보여 준다 */
+  virtual?: boolean;
   picked: PortAddr | null;
   dropOn: string | null;
   setDropOn: (k: string | null) => void;
@@ -198,7 +216,7 @@ function BoxCard({
   const cell = (dir: "in" | "out", port: number) => {
     const addr: PortAddr = { dir, boxId: box.id, port };
     const key = `${dir}:${box.id}:${port}`;
-    const over = port > (dir === "in" ? box.inputs : box.outputs);
+    const over = !virtual && port > (dir === "in" ? box.inputs : box.outputs);
     let label = "";
     let sub = "";
     let color: string | undefined;
@@ -270,11 +288,15 @@ function BoxCard({
         <h3 className="font-semibold">{box.name}</h3>
         <span className="text-xs text-neutral-500">{box.location}</span>
         <span className="ml-auto text-xs text-neutral-500">
-          인풋 {ins.size}/{box.inputs} · 아웃풋 {outs.size}/{box.outputs}
+          {virtual ? `사용 인풋 ${ins.size} · 아웃풋 ${outs.size}` : `인풋 ${ins.size}/${box.inputs} · 아웃풋 ${outs.size}/${box.outputs}`}
         </span>
       </div>
-      <p className="mb-1 text-xs font-medium text-neutral-500">인풋</p>
-      <div className={grid}>{Array.from({ length: maxIn }, (_, i) => cell("in", i + 1))}</div>
+      {maxIn > 0 && (
+        <>
+          <p className="mb-1 text-xs font-medium text-neutral-500">인풋</p>
+          <div className={grid}>{Array.from({ length: maxIn }, (_, i) => cell("in", i + 1))}</div>
+        </>
+      )}
       {maxOut > 0 && (
         <>
           <p className="mt-3 mb-1 text-xs font-medium text-neutral-500">아웃풋</p>

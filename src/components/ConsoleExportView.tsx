@@ -288,7 +288,7 @@ export default function ConsoleExportView({ id }: { id: string }) {
       <section className={step}>
         <h2 className="mb-2 font-semibold">2. 스테이지박스 → DM7 입력</h2>
         <p className="mb-2 text-xs text-neutral-500">
-          박스의 1번 포트가 DM7의 몇 번 Dante 입력으로 들어오는지 적습니다 (Dante Controller의 패치와 같게). 콘솔 로컬 포트(Local)는 OMNI로 들어갑니다.
+          박스의 1번 포트가 DM7의 몇 번 Dante 입력으로 들어오는지 적습니다 (Dante Controller의 패치와 같게). 콘솔 본체 단자(OMNI n)는 OMNI로, “Dante n”(박스 없는 Dante 직결)은 그 번호의 Dante 입력으로 들어갑니다.
           48V는 Dante I/O 장치 쪽 설정이라 I/O 유닛 번호가 필요합니다 — Rio 앞면의 UNIT ID와 같은 번호입니다(DM7 Dante I/O Device 화면의 #번호). 비우면 48V는 쓰지 않습니다.
         </p>
         <table className="w-full max-w-xl border-collapse text-left">

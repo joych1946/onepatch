@@ -96,7 +96,7 @@ export function readDm7(file: Dm7File, stageBoxes: readonly StageBox[], boxes: R
     return { port: null, issue: v ? "unknown" : undefined };
   };
   const phantomOf = (port: PortRef | null): boolean | null => {
-    if (!port || port.kind === "other") return null;
+    if (!port || port.kind === "other" || port.kind === "dante") return null;
     if (port.kind === "local") return readBit(cur, locate(processing, ["Omni", ["InputPort", port.port - 1], "HeadAmp", "48V"]));
     const unit = boxes[port.stageBoxId]?.ioUnit;
     if (!unit) return null;

@@ -49,8 +49,10 @@ describe("출력 포트 해석", () => {
     expect(parseOutPorts(show, "aux", 0, "")).toEqual([]);
   });
   it("표시 ↔ 해석 왕복", () => {
-    for (const text of ["Rio3224 5-6", "Rio3224 5, 7", "Local 1-2", "Rio1608 1, Rio3224 2"])
+    for (const text of ["Rio3224 5-6", "Rio3224 5, 7", "OMNI 1-2", "Rio1608 1, Rio3224 2", "Dante 9-10", "Rio1608 3, OMNI 4"])
       expect(formatOutPorts(show, parseOutPorts(show, "matrix", 0, text))).toBe(text);
+    // 예전 표기 "Local"도 읽는다
+    expect(formatOutPorts(show, parseOutPorts(show, "matrix", 0, "Local 1-2"))).toBe("OMNI 1-2");
   });
   it("Matrix 소스: Main L/R, Aux 번호", () => {
     expect(parseBusRefs(show, "Main L/R, Aux 5")).toEqual(["bus-main-1", "bus-aux-5"]);

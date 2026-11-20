@@ -71,7 +71,9 @@ export function formatPort(port: PortRef | null, boxes: StageBox[]): string {
       return `${box?.name ?? "?"} ${port.port}`;
     }
     case "local":
-      return `Local ${port.port}`;
+      return `OMNI ${port.port}`;
+    case "dante":
+      return `Dante ${port.port}`;
     case "other":
       return port.label || "기타";
   }

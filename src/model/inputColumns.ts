@@ -5,6 +5,7 @@
  */
 import { micName, resolvePhantom, resolveStand } from "./derive";
 import { newId } from "./factory";
+import { freePorts } from "./patch";
 import { updateChannel } from "./inputOps";
 import { COLOR_LABEL, formatPort, MIC_TYPE_LABEL } from "./labels";
 import type { Color, InputChannel, MicRef, PortRef, Show } from "./schema";
@@ -104,7 +105,8 @@ export function parseStand(text: string): string | null {
  * 포트 텍스트 해석.
  * - "12"          → 윗 행과 같은 스테이지박스(없으면 첫 박스)의 12번
  * - "Rio1608 3"   → 이름이 맞는 박스의 3번 (앞부분만 써도 됨: "1608 3", "rio16-3")
- * - "L1", "Local 1" → 콘솔 로컬
+ * - "OMNI 1", "L1", "Local 1" → 콘솔 본체 단자
+ * - "Dante 5"     → 박스 없이 콘솔의 Dante 5번 (Dante 직결)
  * - 그 외          → 기타(자유 텍스트)
  */
 export function parsePort(show: Show, index: number, text: string): PortRef | null {
@@ -120,8 +122,10 @@ export function parsePort(show: Show, index: number, text: string): PortRef | nu
         const boxId =
           above?.kind === "stagebox" ? above.stageBoxId : show.stageBoxes[0]?.id;
         if (boxId) return { kind: "stagebox", stageBoxId: boxId, port };
-      } else if (/^(l|local|lo|로컬|콘솔)$/.test(prefix)) {
+      } else if (LOCAL_PREFIX.test(prefix)) {
         return { kind: "local", port };
+      } else if (DANTE_PREFIX.test(prefix)) {
+        return { kind: "dante", port };
       } else {
         const box = matchStageBox(show, prefix);
         if (box) return { kind: "stagebox", stageBoxId: box.id, port };
@@ -130,6 +134,10 @@ export function parsePort(show: Show, index: number, text: string): PortRef | nu
   }
   return { kind: "other", label: t };
 }
+
+/** 콘솔 본체 단자·Dante 직결을 뜻하는 앞부분 (정규화 후) */
+export const LOCAL_PREFIX = /^(l|local|lo|로컬|콘솔|omni|옴니|본체)$/;
+export const DANTE_PREFIX = /^(dante|dt|단테|dante직결)$/;
 
 /** 정규화된 이름 앞부분으로 스테이지박스 찾기: 정확히 → 앞부분 → 유일하게 포함 */
 export function matchStageBox(show: Show, prefix: string) {
@@ -264,6 +272,8 @@ export const COLUMNS: Column[] = [
     text: (s, ch) => (ch.port ? formatPort(ch.port, s.stageBoxes) : ""),
     editText: (s, ch) => (ch.port ? formatPort(ch.port, s.stageBoxes) : ""),
     set: (show, i, text) => updateChannel(show, i, { port: parsePort(show, i, text) }),
+    // 빈 포트: 박스별 → 콘솔 본체(OMNI). 다른 박스·아무 번호나 직접 입력해도 된다.
+    suggestions: (s) => freePorts(s, "in").map((p) => formatPort(p, s.stageBoxes)),
   },
   {
     key: "link",

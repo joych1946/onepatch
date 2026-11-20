@@ -8,10 +8,28 @@ import type { OutputBus, PortRef, Show, StageBox } from "./schema";
 import type { SheetColumn } from "./sheet";
 
 export type PortDir = "in" | "out";
+/** 현황판의 포트 주소. boxId가 OMNI_BOX/DANTE_BOX면 박스 없는 포트(콘솔 본체 단자, Dante 직결) */
 export type PortAddr = { dir: PortDir; boxId: string; port: number };
 
+/** 현황판에서 박스처럼 다루는 박스 없는 포트 묶음 (Show의 stageBoxes에는 없다) */
+export const OMNI_BOX = "@omni";
+export const DANTE_BOX = "@dante";
+
+/** 주소 → 포트 참조 */
+export function refAt(boxId: string, port: number): PortRef {
+  if (boxId === OMNI_BOX) return { kind: "local", port };
+  if (boxId === DANTE_BOX) return { kind: "dante", port };
+  return { kind: "stagebox", stageBoxId: boxId, port };
+}
+
+/** 포트 참조가 놓인 묶음 (박스 id 또는 OMNI_BOX/DANTE_BOX). 자유 텍스트는 null */
+export function groupOf(p: PortRef | null | undefined): string | null {
+  if (!p || p.kind === "other") return null;
+  return p.kind === "stagebox" ? p.stageBoxId : p.kind === "local" ? OMNI_BOX : DANTE_BOX;
+}
+
 const isAt = (p: PortRef | null | undefined, boxId: string, port: number) =>
-  p?.kind === "stagebox" && p.stageBoxId === boxId && p.port === port;
+  !!p && p.kind !== "other" && groupOf(p) === boxId && p.port === port;
 
 /* ───────────── 현황 ───────────── */
 
@@ -23,15 +41,41 @@ export function boxUsage(show: Show, boxId: string) {
   const ins = new Map<number, InUse[]>();
   const outs = new Map<number, OutUse[]>();
   show.inputs.forEach((c, i) => {
-    if (c.port?.kind === "stagebox" && c.port.stageBoxId === boxId)
+    if (c.port && c.port.kind !== "other" && groupOf(c.port) === boxId)
       ins.set(c.port.port, [...(ins.get(c.port.port) ?? []), { channelIndex: i }]);
   });
   show.outputs.forEach((b) =>
     b.ports.forEach((p, side) => {
-      if (p.kind === "stagebox" && p.stageBoxId === boxId) outs.set(p.port, [...(outs.get(p.port) ?? []), { bus: b, side }]);
+      if (p.kind !== "other" && groupOf(p) === boxId) outs.set(p.port, [...(outs.get(p.port) ?? []), { bus: b, side }]);
     }),
   );
   return { ins, outs };
+}
+
+/** 박스 없는 포트 중 고르기 목록에 늘 보여 줄 콘솔 본체 단자 수 (기종 한도가 아니라 목록 길이) */
+export const OMNI_LIST = 16;
+
+/**
+ * 비어 있는 포트 후보 (그리드 입력·선택 창용): 박스별 빈 포트 → 콘솔 본체(OMNI) 빈 단자.
+ * keep: 지금 이 칸이 쓰는 포트는 비어 있는 것으로 친다.
+ */
+export function freePorts(show: Show, dir: PortDir, keep: PortRef[] = []): PortRef[] {
+  const used = new Set<string>();
+  const key = (p: PortRef) => `${groupOf(p)}:${p.kind === "other" ? "" : p.port}`;
+  if (dir === "in") show.inputs.forEach((c) => c.port && c.port.kind !== "other" && used.add(key(c.port)));
+  else show.outputs.forEach((b) => b.ports.forEach((p) => p.kind !== "other" && used.add(key(p))));
+  keep.forEach((p) => used.delete(key(p)));
+  const out: PortRef[] = [];
+  for (const b of show.stageBoxes)
+    for (let n = 1; n <= (dir === "in" ? b.inputs : b.outputs); n++) {
+      const r = refAt(b.id, n);
+      if (!used.has(key(r))) out.push(r);
+    }
+  for (let n = 1; n <= OMNI_LIST; n++) {
+    const r = refAt(OMNI_BOX, n);
+    if (!used.has(key(r))) out.push(r);
+  }
+  return out;
 }
 
 /* ───────────── 자동 패치 ───────────── */
@@ -87,7 +131,7 @@ export function autoPatch(show: Show, rows: number[], boxId: string, startPort =
 /** 두 포트에 꽂힌 것을 서로 바꾼다 (한쪽이 비어 있으면 옮기기). 인풋끼리, 아웃풋끼리만. */
 export function swapPorts(show: Show, a: PortAddr, b: PortAddr): Show {
   if (a.dir !== b.dir || (a.boxId === b.boxId && a.port === b.port)) return show;
-  const to = (p: PortAddr): PortRef => ({ kind: "stagebox", stageBoxId: p.boxId, port: p.port });
+  const to = (p: PortAddr): PortRef => refAt(p.boxId, p.port);
   const swap = (p: PortRef | null): PortRef | null =>
     isAt(p, a.boxId, a.port) ? to(b) : isAt(p, b.boxId, b.port) ? to(a) : p;
   if (a.dir === "in") {
@@ -113,6 +157,22 @@ export function swapPorts(show: Show, a: PortAddr, b: PortAddr): Show {
 
 export function newStageBox(n: number): StageBox {
   return { id: newId(), name: `Box ${n}`, inputs: 16, outputs: 8, location: "" };
+}
+
+/**
+ * 박스를 지우면 비워지는 패치 (지우기 전에 알려 주기용). 없으면 빈 배열.
+ * 이름·위치·순서를 바꾸는 것은 패치가 박스 id를 가리키므로 아무것도 잃지 않는다.
+ */
+export function boxRemovalLoss(show: Show, ids: string[]): string[] {
+  const gone = (p: PortRef | null) => p?.kind === "stagebox" && ids.includes(p.stageBoxId);
+  const name = (p: PortRef) => (p.kind === "stagebox" ? `${show.stageBoxes.find((b) => b.id === p.stageBoxId)?.name ?? "?"} ${p.port}` : "");
+  const out: string[] = [];
+  for (const c of show.inputs) if (gone(c.port)) out.push(`Ch ${c.number} ${c.source} (${name(c.port!)})`);
+  for (const b of show.outputs) {
+    const ps = b.ports.filter(gone);
+    if (ps.length) out.push(`${b.kind === "aux" ? "Aux" : b.kind === "matrix" ? "Matrix" : "Main"} ${b.number} ${b.name} (${ps.map(name).join(", ")})`);
+  }
+  return out;
 }
 
 /** 박스를 지우면 그 박스를 쓰던 채널 패치와 버스 출력도 비운다 (깨진 참조가 남지 않게) */

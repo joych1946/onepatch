@@ -226,7 +226,7 @@ export function equipmentSummary(show: Show, lib: Library | null, sparePercent =
     }
   }
   const outPorts = new Set(
-    show.outputs.flatMap((b) => b.ports.flatMap((p) => (p.kind === "other" ? [] : [p.kind === "local" ? `L${p.port}` : `${p.stageBoxId}:${p.port}`]))),
+    show.outputs.flatMap((b) => b.ports.flatMap((p) => (p.kind === "other" ? [] : [p.kind === "stagebox" ? `${p.stageBoxId}:${p.port}` : `${p.kind}:${p.port}`]))),
   ).size;
   const spare = (n: number) => (n ? Math.ceil(n * (1 + sparePercent / 100)) : 0);
   const cables = [
