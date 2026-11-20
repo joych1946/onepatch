@@ -28,6 +28,7 @@ import { changedRowIds, contentFingerprint, currentVersion, defaultBase, DIFF_SE
 import { getVersionShow, listVersions } from "@/storage/versionStore";
 import { downloadBlob, downloadText, escGoesBack, isTypingTarget } from "@/lib/download";
 import { useLibrary } from "../useLibrary";
+import { localizeShow, type SourceLang } from "@/model/library";
 import { PagedTable, type Orientation, type PagedItem } from "./Paged";
 import { CableLabels, PatchSheets, StripLabels } from "./Docs";
 
@@ -77,6 +78,8 @@ type Settings = {
   changesTo: string;
   /** 인풋·아웃풋 리스트의 바뀐 행 표시 기준 ("auto" | "none" | 버전 id) */
   markBase: string;
+  /** 출력물의 소스명: 한글 / 영문 (내 라이브러리에 영문 이름이 있는 소스만 바뀜) */
+  sourceLang: SourceLang;
 };
 
 const KEY = "onepatch.print";
@@ -96,6 +99,7 @@ const DEFAULTS: Settings = {
   changesFrom: "auto",
   changesTo: "current",
   markBase: "auto",
+  sourceLang: "ko",
 };
 
 const SUMMARY_COLUMNS: ReportColumn[] = [
@@ -108,12 +112,12 @@ const SUMMARY_COLUMNS: ReportColumn[] = [
 
 export default function PrintView({ id }: { id: string }) {
   const router = useRouter();
-  const [show, setShow] = useState<Show | null | undefined>(undefined);
+  const [stored, setShow] = useState<Show | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const { library } = useLibrary();
   const [s, setS] = useState<Settings>(DEFAULTS);
   const [versions, setVersions] = useState<VersionMeta[]>([]);
-  const [vShows, setVShows] = useState<Record<string, Show>>({});
+  const [storedVShows, setVShows] = useState<Record<string, Show>>({});
   const [printedAt] = useState(() => new Date().toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" }));
 
   useEffect(() => {
@@ -136,6 +140,13 @@ export default function PrintView({ id }: { id: string }) {
     });
 
   const doc = DOCS.find((d) => d.id === s.doc) ?? DOCS[0];
+
+  // 출력물은 고른 언어의 소스명으로 (버전도 같은 기준으로 바꿔야 변경분에 가짜 변경이 생기지 않는다)
+  const show = useMemo(() => (stored && library ? localizeShow(stored, library, s.sourceLang) : stored), [stored, library, s.sourceLang]);
+  const vShows = useMemo(
+    () => (library ? Object.fromEntries(Object.entries(storedVShows).map(([k, v]) => [k, localizeShow(v, library, s.sourceLang)])) : storedVShows),
+    [storedVShows, library, s.sourceLang],
+  );
 
   // PDF로 저장할 때 파일 이름이 되도록
   useEffect(() => {
@@ -172,7 +183,7 @@ export default function PrintView({ id }: { id: string }) {
   const labelSheet = s.labelSheet === "custom" ? s.custom : (LABEL_SHEETS.find((l) => l.id === s.labelSheet) ?? LABEL_SHEETS[0]);
 
   /* 버전: 머리말의 버전 줄, 바뀐 행 표시, 변경분 */
-  const fp = useMemo(() => (show ? contentFingerprint(show) : ""), [show]);
+  const fp = useMemo(() => (stored ? contentFingerprint(stored) : ""), [stored]);
   const resolveId = (v: string, auto: () => VersionMeta | null) => (v === "auto" ? (auto()?.id ?? null) : v === "none" || v === "current" ? v : versions.some((x) => x.id === v) ? v : null);
   const markId = resolveId(s.markBase, () => defaultBase(versions, fp));
   const fromId = resolveId(s.changesFrom, () => defaultBase(versions, fp));
@@ -355,6 +366,13 @@ export default function PrintView({ id }: { id: string }) {
             </button>
           ))}
           <span className="ml-auto" />
+          <label className="flex items-center gap-1 text-neutral-500" title="내 라이브러리에 영문 이름이 있는 소스(국악기 등)만 바뀝니다">
+            소스명
+            <select className={ctl} value={s.sourceLang} onChange={(e) => set({ sourceLang: e.target.value as SourceLang })} aria-label="출력물 소스명 언어">
+              <option value="ko">한글</option>
+              <option value="en">영문</option>
+            </select>
+          </label>
           <label className="flex items-center gap-1 text-neutral-500">
             미리보기
             <select className={ctl} value={s.zoom} onChange={(e) => set({ zoom: Number(e.target.value) })}>

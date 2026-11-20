@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Color, MicType } from "@/model/schema";
 import { COLOR_LABEL, COLOR_SWATCH, MIC_TYPE_LABEL } from "@/model/labels";
-import { addMic, addSource, findMicByName, libId, type Library, type LibraryMic, type SourceDef } from "@/model/library";
+import { addMic, addSource, findMicByName, libId, sourceMatchesQuery, type Library, type LibraryMic, type SourceDef } from "@/model/library";
 import { createDefaultLibrary } from "@/model/libraryDefaults";
 import { norm } from "@/model/text";
 import { STAND_NAMES } from "@/model/legacy";
@@ -273,7 +273,7 @@ function SourcesTab({ library, update }: { library: Library; update: Update }) {
       return { ...l, groups };
     });
 
-  const match = (s: SourceDef) => !n || norm(s.name).includes(n) || norm(s.shortName).includes(n);
+  const match = (s: SourceDef) => sourceMatchesQuery(s, n);
 
   return (
     <div>
@@ -420,6 +420,7 @@ function SourceRow({
           onCommit={(v) => v.trim() && set({ name: v.trim() })}
           aria-label="소스명"
         />
+        <DraftInput className={`${input} w-36`} value={src.nameEn} onCommit={(v) => set({ nameEn: v.trim() })} aria-label="영문 이름" placeholder="영문 이름" />
         <DraftInput className={`${input} w-24 font-mono`} value={src.shortName} onCommit={(v) => set({ shortName: v.trim() })} aria-label="짧은 이름" placeholder="짧은 이름" />
         <span className="inline-flex items-center gap-1">
           <span className="inline-block h-3 w-3 rounded-sm border border-neutral-400" style={{ background: COLOR_SWATCH[src.color] }} />

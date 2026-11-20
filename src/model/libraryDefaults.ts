@@ -127,11 +127,12 @@ const WIRELESS: M[] = [
 
 /** since: 이 항목이 기본 목록에 들어온 판. 기존 저장본에는 그보다 새 항목만 합쳐 넣는다. */
 type G = [id: string, name: string, color: Color, sources: S[], since?: number];
-type Opt = { stereo?: boolean; numbered?: boolean; next?: string[] };
+type Opt = { stereo?: boolean; numbered?: boolean; next?: string[]; en?: string };
 type S = [id: string, name: string, shortName: string, micIds: string[], opt?: Opt];
 
-/** 기본 목록의 판. 기본 항목을 추가하면 올린다. (2: 국악 악기군, 3: 무선 시스템) */
-export const SEED_VERSION = 3;
+/** 기본 목록의 판. 기본 항목을 추가하면 올린다. (2: 국악 악기군, 3: 무선 시스템, 4: 소스 영문 이름) */
+export const SEED_VERSION = 4;
+const SOURCE_EN_SINCE = 4;
 
 const ST: Opt = { stereo: true };
 const NUM: Opt = { numbered: true };
@@ -219,41 +220,51 @@ const GUGAK_BIG = ["mic-beta52a", "mic-d6", "mic-md421", "mic-sm57"];
 const GUGAK_METAL = ["mic-sm81", "mic-km184"];
 const GUGAK_VOX = ["mic-sm58", "mic-beta58a", "mic-ulxd-b58", "mic-kms105", "mic-beta87a"];
 
+/*
+ * 국악 소스의 영문 이름: 국립국어원 로마자 표기법. 소리가 헷갈릴 수 있는 곳만 붙임표(대아쟁 Dae-ajaeng).
+ * 짧은 이름(콘솔 8자)은 영문 이름이 8자를 넘을 때만 줄인다. 번호·L/R은 fitShortName이 8자 안에 맞춘다.
+ * (예전 기본값 "Gaya"는 줄일 필요가 없어 "Gayageum"으로, "SoriBuk"은 표기대로 "Soribuk"으로 — 저장본에서 내가 고치지 않은 경우만 바꿈)
+ */
 const GUGAK: G[] = [
   ["grp-gugak-str", "국악 현악", "brown", [
-    ["src-gayageum", "가야금", "Gaya", GUGAK_STR, NUM],
-    ["src-gayageum25", "25현 가야금", "25Gaya", [...GUGAK_STR, "mic-j48", "mic-ar133"]],
-    ["src-geomungo", "거문고", "Geomungo", GUGAK_STR],
-    ["src-daeajaeng", "대아쟁", "D.Ajaeng", GUGAK_STR],
-    ["src-soajaeng", "소아쟁", "S.Ajaeng", GUGAK_STR],
-    ["src-haegeum", "해금", "Haegeum", GUGAK_STR, NUM],
-    ["src-yanggeum", "양금", "Yanggeum", GUGAK_STR],
+    ["src-gayageum", "가야금", "Gayageum", GUGAK_STR, { ...NUM, en: "Gayageum" }],
+    ["src-gayageum25", "25현 가야금", "25Gaya", [...GUGAK_STR, "mic-j48", "mic-ar133"], { en: "25-hyeon Gayageum" }],
+    ["src-geomungo", "거문고", "Geomungo", GUGAK_STR, { en: "Geomungo" }],
+    ["src-daeajaeng", "대아쟁", "D.Ajaeng", GUGAK_STR, { en: "Dae-ajaeng" }],
+    ["src-soajaeng", "소아쟁", "S.Ajaeng", GUGAK_STR, { en: "So-ajaeng" }],
+    ["src-haegeum", "해금", "Haegeum", GUGAK_STR, { ...NUM, en: "Haegeum" }],
+    ["src-yanggeum", "양금", "Yanggeum", GUGAK_STR, { en: "Yanggeum" }],
   ], 2],
   ["grp-gugak-wind", "국악 관악", "lime", [
-    ["src-daegeum", "대금", "Daegeum", GUGAK_FLUTE, NUM],
-    ["src-sogeum", "소금", "Sogeum", GUGAK_FLUTE],
-    ["src-danso", "단소", "Danso", GUGAK_FLUTE],
-    ["src-piri", "피리", "Piri", GUGAK_REED, NUM],
-    ["src-taepyeongso", "태평소", "Tpyeong", GUGAK_REED],
-    ["src-saenghwang", "생황", "Saenghwa", GUGAK_FLUTE],
+    ["src-daegeum", "대금", "Daegeum", GUGAK_FLUTE, { ...NUM, en: "Daegeum" }],
+    ["src-sogeum", "소금", "Sogeum", GUGAK_FLUTE, { en: "Sogeum" }],
+    ["src-danso", "단소", "Danso", GUGAK_FLUTE, { en: "Danso" }],
+    ["src-piri", "피리", "Piri", GUGAK_REED, { ...NUM, en: "Piri" }],
+    ["src-taepyeongso", "태평소", "Tpyeong", GUGAK_REED, { en: "Taepyeongso" }],
+    ["src-saenghwang", "생황", "Saenghwa", GUGAK_FLUTE, { en: "Saenghwang" }],
   ], 2],
   ["grp-gugak-perc", "국악 타악", "pink", [
-    ["src-janggu-gung", "장구 궁편", "JangGung", GUGAK_DRUM, { numbered: true, next: ["src-janggu-chae"] }],
-    ["src-janggu-chae", "장구 채편", "JangChae", GUGAK_DRUM, NUM],
-    ["src-soribuk", "소리북", "SoriBuk", GUGAK_DRUM],
-    ["src-pungmulbuk", "풍물북", "PungBuk", GUGAK_DRUM],
-    ["src-kkwaenggwari", "꽹과리", "Kkwaeng", GUGAK_METAL],
-    ["src-jing", "징", "Jing", GUGAK_METAL],
-    ["src-daebuk", "대북", "Daebuk", GUGAK_BIG],
-    ["src-modeumbuk", "모듬북", "Modeum", GUGAK_BIG, NUM],
+    ["src-janggu-gung", "장구 궁편", "JangGung", GUGAK_DRUM, { numbered: true, next: ["src-janggu-chae"], en: "Janggu Gungpyeon" }],
+    ["src-janggu-chae", "장구 채편", "JangChae", GUGAK_DRUM, { ...NUM, en: "Janggu Chaepyeon" }],
+    ["src-soribuk", "소리북", "Soribuk", GUGAK_DRUM, { en: "Soribuk" }],
+    ["src-pungmulbuk", "풍물북", "PungBuk", GUGAK_DRUM, { en: "Pungmulbuk" }],
+    ["src-kkwaenggwari", "꽹과리", "Kkwaeng", GUGAK_METAL, { en: "Kkwaenggwari" }],
+    ["src-jing", "징", "Jing", GUGAK_METAL, { en: "Jing" }],
+    ["src-daebuk", "대북", "Daebuk", GUGAK_BIG, { en: "Daebuk" }],
+    ["src-modeumbuk", "모듬북", "Modeum", GUGAK_BIG, { ...NUM, en: "Modeumbuk" }],
   ], 2],
   ["grp-gugak-vox", "국악 성악", "gray", [
-    ["src-sori", "소리", "Sori", GUGAK_VOX, { next: ["src-gosu", "src-soribuk"] }],
-    ["src-minyo", "민요", "Minyo", GUGAK_VOX, NUM],
-    ["src-jeongga", "정가", "Jeongga", GUGAK_VOX],
-    ["src-gosu", "고수 추임새", "Gosu", ["mic-sm58", "mic-sm57"]],
+    ["src-sori", "소리", "Sori", GUGAK_VOX, { next: ["src-gosu", "src-soribuk"], en: "Sori" }],
+    ["src-minyo", "민요", "Minyo", GUGAK_VOX, { ...NUM, en: "Minyo" }],
+    ["src-jeongga", "정가", "Jeongga", GUGAK_VOX, { en: "Jeongga" }],
+    ["src-gosu", "고수 추임새", "Gosu", ["mic-sm58", "mic-sm57"], { en: "Gosu Chuimsae" }],
   ], 2],
 ];
+
+/** 예전 판의 기본 짧은 이름 → 새 기본값 (저장본이 예전 값 그대로일 때만 바꾼다) */
+const OLD_SHORT_NAMES: Record<string, [old: string, now: string]> = { "src-gayageum": ["Gaya", "Gayageum"], "src-soribuk": ["SoriBuk", "Soribuk"] };
+/** 콘솔 파일 읽기에서 예전 짧은 이름도 알아보도록 */
+export const LEGACY_SHORT_NAMES: Record<string, string[]> = Object.fromEntries(Object.entries(OLD_SHORT_NAMES).map(([id, [old]]) => [id, [old]]));
 
 const ALL_GROUPS = [...GROUPS, ...GUGAK];
 
@@ -265,6 +276,7 @@ function toSources(list: G[]): SourceDef[] {
     srcs.map(([id, name, shortName, micIds, opt = {}]) => ({
       id,
       name,
+      nameEn: opt.en ?? "",
       shortName,
       groupId,
       color,
@@ -316,11 +328,23 @@ export function upgradeLibrary(lib: Library): Library {
   const added = toSources(newer)
     .filter((s) => !srcIds.has(s.id))
     .map((s) => ({ ...s, micIds: s.micIds.filter((id) => micIds.has(id)) }));
+  // 4판: 기본 소스의 영문 이름을 채우고, 예전 기본 짧은 이름(내가 고치지 않은 것)만 새 기본값으로
+  const defaults = new Map(toSources(ALL_GROUPS).map((s) => [s.id, s]));
+  const sources = lib.sources.map((s) => {
+    const d = lib.seedVersion < SOURCE_EN_SINCE ? defaults.get(s.id) : undefined;
+    if (!d) return s;
+    const old = OLD_SHORT_NAMES[s.id];
+    return {
+      ...s,
+      nameEn: s.nameEn.trim() ? s.nameEn : d.nameEn,
+      shortName: old && s.shortName === old[0] ? old[1] : s.shortName,
+    };
+  });
   return {
     ...lib,
     seedVersion: SEED_VERSION,
     microphones: [...lib.microphones, ...newMics],
     groups: [...lib.groups, ...newer.filter(([id]) => !groupIds.has(id)).map(([id, name]) => ({ id, name }))],
-    sources: [...lib.sources, ...added],
+    sources: [...sources, ...added],
   };
 }

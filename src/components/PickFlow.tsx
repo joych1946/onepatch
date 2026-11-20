@@ -18,10 +18,12 @@ import {
   micOptions,
   nextSourceNumber,
   sourceLabel,
+  sourceMatchesQuery,
   suggestNextSources,
   type Library,
   type MicOption,
   type SourceDef,
+  type SourceLang,
 } from "@/model/library";
 import {
   applyMicPick,
@@ -50,6 +52,7 @@ type Section = { title: string; header?: Item; items: Item[]; compact?: boolean 
 
 const RECENT_KEY = "onepatch.picker.recentGroups";
 const OPEN_KEY = "onepatch.picker.openGroups";
+const LANG_KEY = "onepatch.picker.sourceLang";
 
 function readList(key: string): string[] | null {
   try {
@@ -84,6 +87,12 @@ export default function PickFlow({ show, library, start, renumber, apply, update
   const [query, setQuery] = useState("");
   const [hi, setHi] = useState(0);
   const [prompt, setPrompt] = useState<Prompt>(null);
+  /** 채널에 넣을 소스 이름: 한글 / 영문 (영문 이름이 있는 소스만 바뀜). 마지막 선택을 기억 */
+  const [lang, setLangState] = useState<SourceLang>(() => (readList(LANG_KEY)?.[0] === "en" ? "en" : "ko"));
+  const setLang = (l: SourceLang) => {
+    setLangState(l);
+    writeList(LANG_KEY, [l]);
+  };
   /** 마이크 목록을 종류로 거르기 (null = 전체) */
   const [micType, setMicType] = useState<MicType | null>(null);
   /** 마지막으로 쓴 악기군 (앞일수록 최근) */
@@ -151,7 +160,7 @@ export default function PickFlow({ show, library, start, renumber, apply, update
 
   const pickSource = (choice: SourceChoice, lib = library) => {
     if (choice.kind === "library") markGroupUsed(choice.src.groupId);
-    const r = applySourcePick(show, lib, row, choice, renumber);
+    const r = applySourcePick(show, lib, row, choice, renumber, lang);
     apply(() => r.show);
     const src = choice.kind === "library" ? choice.src : null;
     onRow(r.rows[0]);
@@ -201,11 +210,14 @@ export default function PickFlow({ show, library, start, renumber, apply, update
       const srcItem = (s: SourceDef, prefix = ""): Item => ({
         key: prefix + s.id,
         label: sourceLabel(s),
-        sub: s.stereo
-          ? "2채널 · 링크"
-          : s.numbered
-            ? `→ ${channelsOf(s, nextSourceNumber(library, show, s, row))[0].source}`
-            : undefined,
+        // 한글 이름과 영문 이름을 함께 (영문 이름이 따로 있는 소스)
+        sub:
+          [
+            s.nameEn.trim() && s.nameEn.trim() !== s.name ? s.nameEn.trim() : "",
+            s.stereo ? "2채널 · 링크" : s.numbered ? `→ ${channelsOf(s, nextSourceNumber(library, show, s, row), lang)[0].source}` : "",
+          ]
+            .filter(Boolean)
+            .join(" · ") || undefined,
         swatch: s.color === "none" ? undefined : COLOR_SWATCH[s.color],
         run: () => pickSource({ kind: "library", src: s }),
       });
@@ -220,10 +232,9 @@ export default function PickFlow({ show, library, start, renumber, apply, update
         if (next.length) out.push({ title: "다음 추천", items: next.map((s) => srcItem(s, "next-")) });
       }
       const match = (s: SourceDef) =>
-        !q ||
-        norm(s.name).includes(q) ||
-        norm(s.shortName).includes(q) ||
-        channelsOf(s).some((c) => norm(c.source).includes(q));
+        sourceMatchesQuery(s, q) ||
+        channelsOf(s).some((c) => norm(c.source).includes(q)) ||
+        channelsOf(s, undefined, "en").some((c) => norm(c.source).includes(q));
       for (const g of groupOrder) {
         const items = library.sources.filter((s) => s.groupId === g.id && match(s)).map((s) => srcItem(s));
         if (!items.length) continue;
@@ -244,7 +255,7 @@ export default function PickFlow({ show, library, start, renumber, apply, update
         });
       }
       const exact = library.sources.some(
-        (s) => norm(s.name) === q || channelsOf(s).some((c) => norm(c.source) === q),
+        (s) => norm(s.name) === q || norm(s.nameEn) === q || channelsOf(s).some((c) => norm(c.source) === q),
       );
       if (q && !exact)
         out.push({
@@ -291,7 +302,7 @@ export default function PickFlow({ show, library, start, renumber, apply, update
     });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, q, query, library, show, row, open, groupOrder, micType]);
+  }, [step, q, query, library, show, row, open, groupOrder, micType, lang]);
 
   const flat = sections.flatMap((s) => (s.header ? [s.header, ...s.items] : s.items));
   const hiClamped = Math.min(hi, Math.max(0, flat.length - 1));
@@ -420,6 +431,26 @@ export default function PickFlow({ show, library, start, renumber, apply, update
                 spellCheck={false}
                 className="w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-blue-600 dark:border-neutral-700"
               />
+              {step.kind === "source" && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs" role="group" aria-label="채널에 넣을 소스 이름">
+                  <span className="text-neutral-500">채널에 넣을 이름</span>
+                  {(["ko", "en"] as const).map((l) => (
+                    <button
+                      key={l}
+                      onClick={() => {
+                        setLang(l);
+                        searchRef.current?.focus();
+                      }}
+                      aria-pressed={lang === l}
+                      className={`rounded-full border px-2.5 py-1 ${
+                        lang === l ? "border-blue-600 bg-blue-50 font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300" : "border-neutral-300 dark:border-neutral-700"
+                      }`}
+                    >
+                      {l === "ko" ? "한글 (가야금)" : "영문 (Gayageum)"}
+                    </button>
+                  ))}
+                </div>
+              )}
               {step.kind === "mic" && (
                 <div className="mt-2 flex flex-wrap gap-1.5 text-xs" role="group" aria-label="마이크 종류">
                   {([null, ...(Object.keys(MIC_TYPE_LABEL) as MicType[])] as (MicType | null)[]).map((t) => (

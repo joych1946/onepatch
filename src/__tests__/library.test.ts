@@ -222,7 +222,7 @@ describe("국악 소스", () => {
     let show = createEmptyShow();
     for (let r = 0; r < 3; r++) show = choose(show, r, "가야금").show;
     expect(show.inputs.map((c) => c.source)).toEqual(["가야금 1", "가야금 2", "가야금 3"]);
-    expect(show.inputs.map((c) => c.shortName)).toEqual(["Gaya 1", "Gaya 2", "Gaya 3"]);
+    expect(show.inputs.map((c) => c.shortName)).toEqual(["Gayagem1", "Gayagem2", "Gayagem3"]);
     // 같은 행에서 다시 골라도 번호 유지, 마이크만 바꿔도 그대로
     show = choose(show, 1, "가야금").show;
     expect(show.inputs[1].source).toBe("가야금 2");

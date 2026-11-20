@@ -44,6 +44,8 @@ export const SourceDefSchema = z.object({
   id: Id,
   /** 스테레오면 "OH"처럼 공통 이름. 채널에는 "OH L", "OH R"로 들어간다. */
   name: z.string().min(1),
+  /** 영문 이름 (국악: 국립국어원 로마자 표기). 비어 있으면 name과 같다고 본다. 검색·영문 입력·인쇄에 쓴다. */
+  nameEn: z.string().default(""),
   shortName: z.string(),
   groupId: Id,
   color: ColorSchema,
@@ -133,39 +135,60 @@ export function fitShortName(base: string, suffix: string): string {
   return b.slice(0, Math.max(0, room)) + suffix;
 }
 
-/** 소스가 채널에 들어갈 이름 (번호가 있으면 "가야금 2", 스테레오면 L/R 두 개) */
-export function channelsOf(src: SourceDef, num?: number): { source: string; shortName: string }[] {
+export type SourceLang = "ko" | "en";
+
+/** 소스 이름 (영문을 골랐는데 영문 이름이 없으면 원래 이름) */
+export const sourceName = (src: SourceDef, lang: SourceLang = "ko") => (lang === "en" && src.nameEn.trim() ? src.nameEn.trim() : src.name);
+
+/** 소스가 채널에 들어갈 이름 (번호가 있으면 "가야금 2", 스테레오면 L/R 두 개). lang = "en"이면 "Gayageum 2" */
+export function channelsOf(src: SourceDef, num?: number, lang: SourceLang = "ko"): { source: string; shortName: string }[] {
   const n = num ? ` ${num}` : "";
   const sides = src.stereo ? (["L", "R"] as const) : ([""] as const);
   return sides.map((side) => ({
-    source: `${src.name}${n}${side ? ` ${side}` : ""}`,
+    source: `${sourceName(src, lang)}${n}${side ? ` ${side}` : ""}`,
     shortName: fitShortName(src.shortName, `${num ?? ""}${num && side ? " " : ""}${side}`),
   }));
 }
 
 export const sourceLabel = (src: SourceDef) => (src.stereo ? `${src.name} L/R` : src.name);
 
-export type SourceMatch = { src: SourceDef; side: 0 | 1; num?: number };
+export type SourceMatch = { src: SourceDef; side: 0 | 1; num?: number; lang: SourceLang };
 
-/** 채널 소스명 → 라이브러리 소스 (side: 0 = 모노/L, 1 = R, num: 번호 붙이기 소스의 번호) */
-export function findSource(lib: Library, channelSource: string): SourceMatch | null {
+const LANGS: SourceLang[] = ["ko", "en"];
+
+/** 채널 소스명(한글·영문 둘 다) → 라이브러리 소스 (side: 0 = 모노/L, 1 = R, num: 번호 붙이기 소스의 번호) */
+export function findSource(lib: Pick<Library, "sources">, channelSource: string): SourceMatch | null {
   const n = norm(channelSource);
   if (!n) return null;
-  for (const src of lib.sources) {
-    const side = channelsOf(src).findIndex((c) => norm(c.source) === n);
-    if (side >= 0) return { src, side: side as 0 | 1 };
-  }
-  // 번호 붙이기 소스: "가야금 2", "Keys 2 L"
+  for (const lang of LANGS)
+    for (const src of lib.sources) {
+      if (lang === "en" && !src.nameEn.trim()) continue;
+      const side = channelsOf(src, undefined, lang).findIndex((c) => norm(c.source) === n);
+      if (side >= 0) return { src, side: side as 0 | 1, lang };
+    }
+  // 번호 붙이기 소스: "가야금 2", "Gayageum 2", "Keys 2 L"
   const m = channelSource.trim().match(/^(.*\S)\s+(\d+)(?:\s+([LR]))?$/i);
   if (!m) return null;
   const num = parseInt(m[2], 10);
-  for (const src of lib.sources) {
-    if (!src.numbered) continue;
-    const side = channelsOf(src, num).findIndex((c) => norm(c.source) === n);
-    if (side >= 0) return { src, side: side as 0 | 1, num };
-  }
+  for (const lang of LANGS)
+    for (const src of lib.sources) {
+      if (!src.numbered || (lang === "en" && !src.nameEn.trim())) continue;
+      const side = channelsOf(src, num, lang).findIndex((c) => norm(c.source) === n);
+      if (side >= 0) return { src, side: side as 0 | 1, num, lang };
+    }
   return null;
 }
+
+/** 채널 소스명을 고른 언어로 (라이브러리에 있는 소스만 바꾸고, 나머지는 그대로) */
+export function localizeSource(lib: Pick<Library, "sources">, channelSource: string, lang: SourceLang): string {
+  const f = findSource(lib, channelSource);
+  if (!f || f.lang === lang) return channelSource;
+  return channelsOf(f.src, f.num, lang)[f.side]?.source ?? channelSource;
+}
+
+/** 소스 검색: 한글 이름·영문 이름·짧은 이름 어느 것으로도 */
+export const sourceMatchesQuery = (src: SourceDef, q: string) =>
+  !q || norm(src.name).includes(q) || norm(src.nameEn).includes(q) || norm(src.shortName).includes(q);
 
 /** 번호 붙이기 소스의 다음 번호 (exceptRow 행은 빼고 센다) */
 export function nextSourceNumber(lib: Library, show: Show, src: SourceDef, exceptRow = -1): number {
@@ -230,6 +253,7 @@ export function addSource(lib: Library, name: string, groupId: string): { lib: L
   const src: SourceDef = {
     id: libId("src"),
     name: name.trim(),
+    nameEn: "",
     shortName: name.trim().replace(/\s+/g, "").slice(0, 8),
     groupId: group ? group.id : lib.groups[0].id,
     color: sibling?.color ?? "none",
@@ -376,4 +400,16 @@ export function micOptions(lib: Library, show: Show, src: SourceDef | null) {
   const rec = new Set(recIds);
   const others = ownedFirst(lib.microphones.filter((m) => !rec.has(m.id))).map(opt);
   return { recommended, others };
+}
+
+/** 출력물용: 채널 소스명을 고른 언어로 바꾼 Show (라이브러리에 있는 소스만, 저장 데이터는 그대로) */
+export function localizeShow<S extends Show>(show: S, lib: Pick<Library, "sources">, lang: SourceLang): S {
+  let changed = false;
+  const inputs = show.inputs.map((c) => {
+    const source = localizeSource(lib, c.source, lang);
+    if (source === c.source) return c;
+    changed = true;
+    return { ...c, source };
+  });
+  return changed ? { ...show, inputs } : show;
 }

@@ -15,6 +15,7 @@ import {
   type Library,
   type LibraryMic,
   type SourceDef,
+  type SourceLang,
 } from "./library";
 import type { InputChannel, Show } from "./schema";
 
@@ -44,6 +45,8 @@ export function applySourcePick(
   index: number,
   choice: SourceChoice,
   renumber: boolean,
+  /** 채널에 넣을 소스 이름의 언어 (국악처럼 영문 이름이 있는 소스) */
+  lang: SourceLang = "ko",
 ): { show: Show; rows: number[] } {
   let s = show;
   if (index >= s.inputs.length) {
@@ -58,7 +61,7 @@ export function applySourcePick(
   }
   const names =
     choice.kind === "library"
-      ? channelsOf(choice.src, num)
+      ? channelsOf(choice.src, num, lang)
       : [{ source: choice.name.trim(), shortName: choice.name.trim() }];
   const color = choice.kind === "library" ? choice.src.color : null;
 

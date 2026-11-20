@@ -5,7 +5,8 @@
  * 파일에 없는 정보(마이크, 스탠드, 연주자, 비고)는 새 Show에서는 비워 두고, 기존 Show에서는 건드리지 않는다.
  */
 import type { BusKind, Color, InputChannel, OutputBus, PortRef, Show } from "@/model/schema";
-import type { SourceDef, SourceGroup } from "@/model/library";
+import { channelsOf, type SourceDef, type SourceGroup } from "@/model/library";
+import { LEGACY_SHORT_NAMES } from "@/model/libraryDefaults";
 import { newId } from "@/model/factory";
 import { newChannel } from "@/model/inputOps";
 import { busesOf, newBus } from "@/model/outputOps";
@@ -34,10 +35,23 @@ export function matchSource(name: string, sources: readonly SourceDef[], groups:
   if (m && m[1]) tries.push([m[1], m[2].replace(/\s+/g, " ")]);
   for (const [key, suffix] of tries) {
     const k = norm(key);
-    const src = sources.find((s) => norm(s.name) === k || norm(s.shortName) === k);
+    // 한글 이름·영문 이름·짧은 이름·예전 기본 짧은 이름("Gaya")
+    const src = sources.find(
+      (s) => norm(s.name) === k || norm(s.nameEn) === k || norm(s.shortName) === k || (LEGACY_SHORT_NAMES[s.id] ?? []).some((x) => norm(x) === k),
+    );
     if (src) {
       const sep = /^\d/.test(suffix) && /\d$/.test(src.name) ? "-" : " ";
       return { source: suffix ? `${src.name}${sep}${suffix}` : src.name, sourceDef: src, groupName: groups.find((g) => g.id === src.groupId)?.name ?? "" };
+    }
+  }
+  // 8자에 맞추느라 줄어든 번호 붙은 짧은 이름("Gayagem2", "JangGng1"): 같은 규칙으로 만들어 비교
+  const num = t.match(/^(.*?)\s*(\d+)$/);
+  if (num) {
+    const n = parseInt(num[2], 10);
+    for (const src of sources) {
+      if (!src.numbered) continue;
+      if (channelsOf(src, n).some((c) => norm(c.shortName) === norm(t)))
+        return { source: channelsOf(src, n)[0].source, sourceDef: src, groupName: groups.find((g) => g.id === src.groupId)?.name ?? "" };
     }
   }
   return null;
