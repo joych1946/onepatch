@@ -19,7 +19,7 @@ import { dm7FileInfo, type Dm7FileInfo } from "@/export/dm7/fileInfo";
 import { consoleTasks } from "@/export/dm7/tasks";
 import { applyNameFix, exportChecks, type ExportCheck } from "@/export/checks";
 import { profileByModel, DEFAULT_CONSOLE_PROFILE } from "@/export/profile";
-import { downloadBlob, isTypingTarget } from "@/lib/download";
+import { downloadBlob, escGoesBack } from "@/lib/download";
 import { dm7FileName } from "@/export/dm7/fileName";
 import { showDocumentTitle } from "@/model/showInfo";
 import { quantityIssues } from "@/model/library";
@@ -51,7 +51,7 @@ export default function ConsoleExportView({ id }: { id: string }) {
   // Esc: Show 화면으로 돌아가기 (입력 칸에서는 동작하지 않음)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented || isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!escGoesBack(e)) return;
       e.preventDefault();
       router.push(routes.show(id));
     };

@@ -156,7 +156,7 @@ function PatchBoard({ show, apply }: Pick<Props, "show" | "apply">) {
   const boxName = (id: string) => show.stageBoxes.find((b) => b.id === id)?.name ?? "?";
 
   return (
-    <section>
+    <section data-esc-layer={picked ? "" : undefined}>
       <div className="mb-2 flex flex-wrap items-baseline gap-3">
         <h2 className="text-base font-semibold">패치 현황판</h2>
         <p className="text-xs text-neutral-500" role="status">

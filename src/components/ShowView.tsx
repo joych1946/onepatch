@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import type { Show } from "@/model/schema";
 import { showFileName, showToJson } from "@/model/serialize";
 import { MIC_TYPE_LABEL } from "@/model/labels";
-import { downloadText, isTypingTarget } from "@/lib/download";
+import { downloadText, escGoesBack, isTypingTarget } from "@/lib/download";
 import InputGrid from "./InputGrid";
 import OutputsView from "./OutputsView";
 import GroupsView from "./GroupsView";
@@ -130,7 +130,10 @@ export default function ShowView({ id }: { id: string }) {
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === "Escape") router.push("/");
+      if (e.key === "Escape") {
+        if (!escGoesBack(e)) return;
+        router.push("/");
+      }
       else if (e.key === "i") setInfoOpen(true);
       else if (e.key === "v") openSaveVersion();
       else if (e.key === "F2") setEditingTitle(true);

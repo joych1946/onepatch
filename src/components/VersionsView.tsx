@@ -11,7 +11,7 @@ import type { Show } from "@/model/schema";
 import { contentFingerprint, currentVersion, defaultBase, DIFF_SECTIONS, diffShows, suggestVersionName, type RowChange, type ShowDiff, type VersionMeta } from "@/model/versions";
 import { deleteVersion, getVersionShow, listVersions, saveVersion } from "@/storage/versionStore";
 import { showDocumentTitle } from "@/model/showInfo";
-import { isTypingTarget } from "@/lib/download";
+import { escGoesBack } from "@/lib/download";
 import { routes } from "@/lib/routes";
 import { useShowDoc } from "./useShowDoc";
 
@@ -50,7 +50,8 @@ export default function VersionsView({ id }: { id: string }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented || isTypingTarget(e.target)) return;
+      if (!escGoesBack(e)) return;
+      e.preventDefault();
       router.push(routes.show(id));
     };
     window.addEventListener("keydown", onKey);

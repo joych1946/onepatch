@@ -26,7 +26,7 @@ import { consoleTasks, TASK_SECTIONS } from "@/export/dm7/tasks";
 import { DEFAULT_CONSOLE_PROFILE } from "@/export/profile";
 import { changedRowIds, contentFingerprint, currentVersion, defaultBase, DIFF_SECTIONS, diffShows, type VersionMeta } from "@/model/versions";
 import { getVersionShow, listVersions } from "@/storage/versionStore";
-import { downloadBlob, downloadText, isTypingTarget } from "@/lib/download";
+import { downloadBlob, downloadText, escGoesBack, isTypingTarget } from "@/lib/download";
 import { useLibrary } from "../useLibrary";
 import { PagedTable, type Orientation, type PagedItem } from "./Paged";
 import { CableLabels, PatchSheets, StripLabels } from "./Docs";
@@ -152,6 +152,7 @@ export default function PrintView({ id }: { id: string }) {
       if (e.defaultPrevented || isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       // Esc: Show 화면으로 돌아가기 (Show 화면에서 P로 들어온 것의 반대)
       if (e.key === "Escape") {
+        if (!escGoesBack(e)) return;
         e.preventDefault();
         router.push(routes.show(id));
         return;

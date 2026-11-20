@@ -14,7 +14,7 @@ import { contentFingerprint, defaultBase, type VersionMeta } from "@/model/versi
 import { getVersionShow, listVersions } from "@/storage/versionStore";
 import { deleteShareLink, getShareLink, putShareLink, type ShareLink } from "@/storage/shareLinks";
 import { showDocumentTitle } from "@/model/showInfo";
-import { isTypingTarget } from "@/lib/download";
+import { escGoesBack } from "@/lib/download";
 import { routes } from "@/lib/routes";
 import { useShowDoc } from "./useShowDoc";
 
@@ -54,7 +54,8 @@ export default function ShareView({ id }: { id: string }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented || isTypingTarget(e.target)) return;
+      if (!escGoesBack(e)) return;
+      e.preventDefault();
       router.push(routes.show(id));
     };
     window.addEventListener("keydown", onKey);
