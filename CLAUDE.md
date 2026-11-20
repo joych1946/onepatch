@@ -46,3 +46,9 @@
 - 크루 공유: 내용 `src/model/share.ts`(인쇄용 행 + 지난 공유본과의 칸 단위 변경), 역할 `src/model/shareRoles.ts`, 서버 `src/app/api/share/route.ts` + `src/server/shareStore.ts`(Vercel Blob 비공개, 시험은 `ONEPATCH_SHARE_DIR`), 감독님 화면 `/show/share`, 크루 화면 `/s?id=`(`CrewView` — 가볍게, 모델 코드 안 가져옴). 링크·키는 IndexedDB `shares`, 전체 백업 포함.
 - 콘솔 읽기(DM7 → Show): `src/export/dm7/dm7Import.ts`(파일 → 스냅샷), `src/export/importShow.ts`(새 Show·콘솔 변경분, 기종 중립), 화면 `src/components/Dm7Import.tsx`(목록 "DM7 파일에서 새 Show", 콘솔 화면 6번).
 - 콘솔 내보내기(DM7): `src/export/dm7/`. 쇼 파일 위치는 항상 파일 안 스키마로 계산(`mbdf.ts`)하고 코드에 박지 않는다. 검증 샘플은 `~/Documents/vender/dm7`(저장소 밖, 없으면 테스트 건너뜀).
+  48V 처리는 `phantomMode`(off 기본 / keep / sheet). 기존 바이트 일치·실기 테스트는 `sheetOpts`(시트대로 켜기)로 돌린다.
+- 예전 저장본 자동 변환: 값 이름 바꾸기는 스키마 필드 변환(`src/model/legacy.ts`, 예: 스탠드 톨붐→롱T)으로 — Show·라이브러리·템플릿·버전·백업·공유본을 읽을 때 모두 적용. 기본 라이브러리에 항목을 더하면 `SEED_VERSION`을 올리고 `upgradeLibrary`에서 저장본에 없는 것만 합친다(3: 무선, 4: 소스 영문 이름).
+- 포트: `PortRef`는 stagebox / local(화면 "OMNI n") / dante(박스 없는 Dante 직결) / other. 현황판의 박스 없는 묶음은 `OMNI_BOX`·`DANTE_BOX`(`src/model/patch.ts`), 아웃풋 물리 출력 선택 창 `src/components/OutPortPicker.tsx`(L/R 따로). 스테이지박스 기종 목록(공식 사양 값만) `src/model/stageboxModels.ts`.
+- Esc: 화면의 "이전 화면으로"는 `escGoesBack`(`src/lib/download.ts`) — 열린 대화상자(`aria-modal`)·고르는 중 상태(`data-esc-layer`)·편집 칸이 있으면 그것부터 닫는다. 새 선택 창·대화상자는 `aria-modal="true"`를 단다.
+- 표 편집 칸 후보: `filterSuggestions`(`src/model/sheet.ts`) — 편집을 막 시작했으면 전부, 열의 `suggestionKeys`로 종류(DI·무선)로도 검색.
+- 소스 영문 이름: `SourceDef.nameEn`, 채널 이름 언어 `channelsOf(src, num, lang)`, 출력물 언어 바꾸기 `localizeShow`(저장 데이터는 그대로). 인쇄는 "전체/선택" 묻기 후 여러 출력물을 한 번에(이름 있는 `@page`).
