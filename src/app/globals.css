@@ -52,6 +52,24 @@ kbd {
 .sheet:last-child {
   break-after: auto;
 }
+/* 여러 출력물을 한 번에 인쇄할 때: 쪽마다 방향을 따로(이름 있는 쪽), 출력물 사이는 새 쪽에서 */
+@page landscape {
+  size: A4 landscape;
+  margin: 0;
+}
+@page portrait {
+  size: A4 portrait;
+  margin: 0;
+}
+.sheet-landscape {
+  page: landscape;
+}
+.sheet-portrait {
+  page: portrait;
+}
+.print-doc + .print-doc {
+  break-before: page;
+}
 .measure {
   position: absolute;
   left: -10000px;

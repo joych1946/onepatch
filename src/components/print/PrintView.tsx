@@ -80,6 +80,9 @@ type Settings = {
   markBase: string;
   /** 출력물의 소스명: 한글 / 영문 (내 라이브러리에 영문 이름이 있는 소스만 바뀜) */
   sourceLang: SourceLang;
+  /** 인쇄할 때 마지막으로 고른 것: 전체 / 선택한 출력물 */
+  printMode: "all" | "selected";
+  printDocs: Doc[];
 };
 
 const KEY = "onepatch.print";
@@ -100,6 +103,8 @@ const DEFAULTS: Settings = {
   changesTo: "current",
   markBase: "auto",
   sourceLang: "ko",
+  printMode: "all",
+  printDocs: ["inputs", "outputs", "patch"],
 };
 
 const SUMMARY_COLUMNS: ReportColumn[] = [
@@ -118,6 +123,9 @@ export default function PrintView({ id }: { id: string }) {
   const [s, setS] = useState<Settings>(DEFAULTS);
   const [versions, setVersions] = useState<VersionMeta[]>([]);
   const [storedVShows, setVShows] = useState<Record<string, Show>>({});
+  /** 인쇄 중인 출력물들 (null = 미리보기는 고른 출력물 하나) */
+  const [printing, setPrinting] = useState<Doc[] | null>(null);
+  const [asking, setAsking] = useState(false);
   const [printedAt] = useState(() => new Date().toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" }));
 
   useEffect(() => {
@@ -141,6 +149,31 @@ export default function PrintView({ id }: { id: string }) {
 
   const doc = DOCS.find((d) => d.id === s.doc) ?? DOCS[0];
 
+  // 고른 출력물들을 정해진 순서로 한꺼번에 그린 뒤 인쇄 창을 연다. 인쇄 창을 닫으면 미리보기로.
+  useEffect(() => {
+    if (!printing) return;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      setPrinting(null);
+    };
+    window.addEventListener("afterprint", finish);
+    // 쪽 나누기(행 높이 재기)가 끝나도록 몇 프레임 기다린다
+    const t = window.setTimeout(() => {
+      window.print();
+      window.setTimeout(finish, 500);
+    }, 400);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("afterprint", finish);
+    };
+  }, [printing]);
+  const startPrint = (docs: Doc[]) => {
+    setAsking(false);
+    setPrinting(DOCS.map((d) => d.id).filter((id) => docs.includes(id)));
+  };
+
   // 출력물은 고른 언어의 소스명으로 (버전도 같은 기준으로 바꿔야 변경분에 가짜 변경이 생기지 않는다)
   const show = useMemo(() => (stored && library ? localizeShow(stored, library, s.sourceLang) : stored), [stored, library, s.sourceLang]);
   const vShows = useMemo(
@@ -160,6 +193,12 @@ export default function PrintView({ id }: { id: string }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // ⌘P / Ctrl+P: 브라우저 인쇄 대신 "무엇을 출력할지" 먼저 묻기
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setAsking(true);
+        return;
+      }
       if (e.defaultPrevented || isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       // Esc: Show 화면으로 돌아가기 (Show 화면에서 P로 들어온 것의 반대)
       if (e.key === "Escape") {
@@ -345,9 +384,77 @@ export default function PrintView({ id }: { id: string }) {
   );
   const stripTooWide = s.perStrip * s.cellMm > 277;
 
+  /** 출력물 하나의 내용 (미리보기·인쇄 공통) */
+  const docBody = (d: Doc) => (
+    <>
+        {d === "inputs" && (
+          <PagedTable show={show} docName="인풋리스트" extra={`${show.inputs.length}ch`} orientation="landscape" columns={inputCols} items={inputItems} fontPt={s.fontPt} printedAt={printedAt} note={versionNote(true)} />
+        )}
+        {d === "outputs" && (
+          <PagedTable show={show} docName="아웃풋 리스트" extra={`${show.outputs.length}개 버스`} orientation="landscape" columns={outputCols} items={outputItems} fontPt={s.fontPt} printedAt={printedAt} note={versionNote(true)} />
+        )}
+        {d === "patch" && <PatchSheets show={show} printedAt={printedAt} />}
+        {d === "summary" && (
+          <PagedTable
+            show={show}
+            docName="장비 집계표"
+            extra={`${show.inputs.length}ch 기준`}
+            orientation="portrait"
+            columns={SUMMARY_COLUMNS}
+            items={summaryItems}
+            fontPt={10}
+            printedAt={printedAt}
+            showHead={false}
+          />
+        )}
+        {d === "strip" && <StripLabels show={show} perStrip={s.perStrip} cellMm={s.cellMm} heightMm={s.stripMm} printedAt={printedAt} />}
+        {d === "cable" && <CableLabels show={show} sheet={labelSheet} startAt={s.startAt} />}
+        {d === "changes" &&
+          (changeDiff ? (
+            <PagedTable
+              show={show}
+              docName="변경분"
+              extra={`${vName(fromId)} → ${vName(toId)} · ${changeDiff.total}건`}
+              orientation="portrait"
+              columns={CHANGE_COLUMNS}
+              items={changeItems.length ? changeItems : [{ kind: "row", cells: { target: "바뀐 것이 없습니다." } }]}
+              fontPt={9}
+              printedAt={printedAt}
+              note={versionNote(false)}
+            />
+          ) : (
+            <p className="no-print p-6 text-center text-neutral-500">{versions.length ? "버전 내용을 읽는 중…" : "저장한 버전이 없습니다."}</p>
+          ))}
+        {d === "tasks" && (
+          <PagedTable
+            show={show}
+            docName="콘솔 할 일"
+            extra={DEFAULT_CONSOLE_PROFILE.name}
+            orientation="portrait"
+            columns={TASK_COLUMNS}
+            items={taskItems}
+            fontPt={9}
+            printedAt={printedAt}
+          />
+        )}
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-neutral-200 dark:bg-neutral-800">
-      <style>{`@page { size: A4 ${doc.orientation}; margin: 0; }`}</style>
+      <style>{`@page { size: A4 ${printing ? DOCS.find((d) => d.id === printing[0])?.orientation ?? "portrait" : doc.orientation}; margin: 0; }`}</style>
+      {asking && (
+        <PrintAsk
+          mode={s.printMode}
+          docs={s.printDocs}
+          current={s.doc}
+          onCancel={() => setAsking(false)}
+          onPrint={(mode, docs) => {
+            set({ printMode: mode, printDocs: mode === "selected" ? docs : s.printDocs });
+            startPrint(mode === "all" ? DOCS.map((d) => d.id) : docs);
+          }}
+        />
+      )}
       <div className="no-print sticky top-0 z-10 space-y-2 border-b border-neutral-300 bg-white/95 p-3 text-sm backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/95">
         <div className="flex flex-wrap items-center gap-2">
           <Link href={routes.show(show.id)} className="text-neutral-500 hover:underline">
@@ -381,8 +488,8 @@ export default function PrintView({ id }: { id: string }) {
               ))}
             </select>
           </label>
-          <button className={`${btn} border-blue-500 font-medium text-blue-700 dark:text-blue-300`} onClick={() => window.print()}>
-            인쇄 / PDF 저장 <kbd>⌘P</kbd>
+          <button className={`${btn} border-blue-500 font-medium text-blue-700 dark:text-blue-300`} onClick={() => setAsking(true)}>
+            인쇄 / PDF 저장… <kbd>⌘P</kbd>
           </button>
           <button className={btn} onClick={exportXlsx} title="인풋·아웃풋·박스별 패치·장비 집계를 시트로">
             엑셀 (.xlsx)
@@ -508,56 +615,99 @@ export default function PrintView({ id }: { id: string }) {
       </div>
 
       <div className="print-root overflow-x-auto py-6" style={{ zoom: s.zoom }}>
-        {s.doc === "inputs" && (
-          <PagedTable show={show} docName="인풋리스트" extra={`${show.inputs.length}ch`} orientation="landscape" columns={inputCols} items={inputItems} fontPt={s.fontPt} printedAt={printedAt} note={versionNote(true)} />
-        )}
-        {s.doc === "outputs" && (
-          <PagedTable show={show} docName="아웃풋 리스트" extra={`${show.outputs.length}개 버스`} orientation="landscape" columns={outputCols} items={outputItems} fontPt={s.fontPt} printedAt={printedAt} note={versionNote(true)} />
-        )}
-        {s.doc === "patch" && <PatchSheets show={show} printedAt={printedAt} />}
-        {s.doc === "summary" && (
-          <PagedTable
-            show={show}
-            docName="장비 집계표"
-            extra={`${show.inputs.length}ch 기준`}
-            orientation="portrait"
-            columns={SUMMARY_COLUMNS}
-            items={summaryItems}
-            fontPt={10}
-            printedAt={printedAt}
-            showHead={false}
-          />
-        )}
-        {s.doc === "strip" && <StripLabels show={show} perStrip={s.perStrip} cellMm={s.cellMm} heightMm={s.stripMm} printedAt={printedAt} />}
-        {s.doc === "cable" && <CableLabels show={show} sheet={labelSheet} startAt={s.startAt} />}
-        {s.doc === "changes" &&
-          (changeDiff ? (
-            <PagedTable
-              show={show}
-              docName="변경분"
-              extra={`${vName(fromId)} → ${vName(toId)} · ${changeDiff.total}건`}
-              orientation="portrait"
-              columns={CHANGE_COLUMNS}
-              items={changeItems.length ? changeItems : [{ kind: "row", cells: { target: "바뀐 것이 없습니다." } }]}
-              fontPt={9}
-              printedAt={printedAt}
-              note={versionNote(false)}
-            />
-          ) : (
-            <p className="no-print p-6 text-center text-neutral-500">{versions.length ? "버전 내용을 읽는 중…" : "저장한 버전이 없습니다."}</p>
-          ))}
-        {s.doc === "tasks" && (
-          <PagedTable
-            show={show}
-            docName="콘솔 할 일"
-            extra={DEFAULT_CONSOLE_PROFILE.name}
-            orientation="portrait"
-            columns={TASK_COLUMNS}
-            items={taskItems}
-            fontPt={9}
-            printedAt={printedAt}
-          />
-        )}
+        {/* 인쇄 중에는 고른 출력물 모두. 변경분은 비교할 버전이 있을 때만 (빈 쪽이 나오지 않게) */}
+        {(printing ? printing.filter((d) => d !== "changes" || changeDiff) : [s.doc]).map((d) => (
+          <div key={d} className="print-doc">
+            {docBody(d)}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 인쇄를 누르면 먼저 묻기: 전체 출력 / 선택한 출력물만 (마지막 선택을 기억) */
+function PrintAsk({
+  mode: mode0,
+  docs: docs0,
+  current,
+  onCancel,
+  onPrint,
+}: {
+  mode: "all" | "selected";
+  docs: Doc[];
+  current: Doc;
+  onCancel: () => void;
+  onPrint: (mode: "all" | "selected", docs: Doc[]) => void;
+}) {
+  const [mode, setMode] = useState(mode0);
+  const [docs, setDocs] = useState<Doc[]>(docs0.length ? docs0 : [current]);
+  const ok = mode === "all" || docs.length > 0;
+  const radio = "flex cursor-pointer items-start gap-2 rounded-lg border p-3";
+  return (
+    <div
+      className="no-print fixed inset-0 z-50"
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Escape") {
+          e.preventDefault();
+          onCancel();
+        } else if (e.key === "Enter" && ok) {
+          e.preventDefault();
+          onPrint(mode, docs);
+        }
+      }}
+    >
+      <div className="absolute inset-0 bg-black/30" onClick={onCancel} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="무엇을 출력할까요"
+        className="absolute inset-x-0 bottom-0 space-y-3 rounded-t-2xl bg-white p-5 text-sm shadow-2xl sm:inset-x-auto sm:top-16 sm:bottom-auto sm:left-1/2 sm:w-[520px] sm:-translate-x-1/2 sm:rounded-2xl dark:bg-neutral-900"
+      >
+        <h2 className="text-base font-semibold">무엇을 출력할까요?</h2>
+        <label className={`${radio} ${mode === "all" ? "border-blue-600 bg-blue-50 dark:bg-blue-950" : "border-neutral-300 dark:border-neutral-700"}`}>
+          <input type="radio" name="print-mode" checked={mode === "all"} onChange={() => setMode("all")} autoFocus={mode0 === "all"} />
+          <span>
+            <b>전체 출력</b>
+            <span className="block text-xs text-neutral-500">{DOCS.map((d) => d.name).join(" → ")} 순서로 한 번에</span>
+          </span>
+        </label>
+        <label className={`${radio} ${mode === "selected" ? "border-blue-600 bg-blue-50 dark:bg-blue-950" : "border-neutral-300 dark:border-neutral-700"}`}>
+          <input type="radio" name="print-mode" checked={mode === "selected"} onChange={() => setMode("selected")} autoFocus={mode0 === "selected"} />
+          <span className="flex-1">
+            <b>선택한 출력물만</b>
+            <span className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5">
+              {DOCS.map((d) => (
+                <span key={d.id} className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    aria-label={d.name}
+                    checked={docs.includes(d.id)}
+                    onChange={(e) => {
+                      setMode("selected");
+                      setDocs((cur) => (e.target.checked ? [...cur, d.id] : cur.filter((x) => x !== d.id)));
+                    }}
+                  />
+                  {d.name}
+                </span>
+              ))}
+            </span>
+          </span>
+        </label>
+        <p className="text-xs text-neutral-500">인쇄 창에서 “PDF로 저장”을 고르면 한 파일로 저장됩니다. 저장한 버전이 없으면 변경분은 빠집니다.</p>
+        <div className="flex justify-end gap-2">
+          <button className="rounded border border-neutral-300 px-3 py-1.5 dark:border-neutral-700" onClick={onCancel}>
+            취소 <kbd>Esc</kbd>
+          </button>
+          <button
+            className="rounded border border-blue-600 bg-blue-600 px-3 py-1.5 font-medium text-white disabled:opacity-40"
+            disabled={!ok}
+            onClick={() => onPrint(mode, docs)}
+          >
+            인쇄 <kbd>Enter</kbd>
+          </button>
+        </div>
       </div>
     </div>
   );

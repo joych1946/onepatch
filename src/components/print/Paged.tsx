@@ -21,7 +21,7 @@ const PX_PER_MM = 96 / 25.4;
 export function Sheet({ orientation, children, className = "" }: { orientation: Orientation; children: ReactNode; className?: string }) {
   const { w, h } = PAGE_MM[orientation];
   return (
-    <div className={`sheet ${className}`} style={{ width: `${w}mm`, height: `${h}mm`, padding: `${MARGIN_MM}mm` }}>
+    <div className={`sheet sheet-${orientation} ${className}`} style={{ width: `${w}mm`, height: `${h}mm`, padding: `${MARGIN_MM}mm` }}>
       {children}
     </div>
   );

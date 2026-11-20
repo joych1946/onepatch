@@ -83,7 +83,7 @@ export function CableLabels({ show, sheet, startAt }: { show: Show; sheet: Label
   return (
     <>
       {pages.map((page, pi) => (
-        <div key={pi} className="sheet" style={{ width: "210mm", height: "297mm", padding: 0 }}>
+        <div key={pi} className="sheet sheet-portrait" style={{ width: "210mm", height: "297mm", padding: 0 }}>
           {page.map((l, i) => {
             const col = i % sheet.cols;
             const row = Math.floor(i / sheet.cols);
