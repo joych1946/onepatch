@@ -2,15 +2,15 @@
 
 /**
  * 스테이지박스 구성 + 자동 패치 + 패치 현황판.
- * 현황판의 포트는 드래그해서 다른 포트에 놓거나, 누르고 바꿀 포트를 누르면 서로 바뀐다(터치·키보드 겸용).
+ * 현황판(끌어다 놓기 패치)은 components/PatchBoard.
  */
-import { useEffect, useState } from "react";
-import type { Show, StageBox } from "@/model/schema";
-import { COLOR_SWATCH } from "@/model/labels";
-import { autoPatch, boxColumns, boxOps, boxRemovalLoss, boxUsage, DANTE_BOX, OMNI_BOX, swapPorts, type PortAddr } from "@/model/patch";
+import { useState } from "react";
+import type { Show } from "@/model/schema";
+import { autoPatch, boxColumns, boxOps, boxRemovalLoss, boxUsage } from "@/model/patch";
 import { formatRanges, parseRanges } from "@/model/outputOps";
 import { STAGEBOX_MODELS } from "@/model/stageboxModels";
 import Sheet from "./Sheet";
+import PatchBoard from "./PatchBoard";
 import type { ValidationIssue } from "./useShowDoc";
 
 interface Props {
@@ -81,7 +81,7 @@ export default function PatchView({ show, apply, undo, redo, issues, onMessage, 
 
       <AutoPatchForm show={show} apply={apply} onMessage={onMessage} />
 
-      <PatchBoard show={show} apply={apply} />
+      <PatchBoard show={show} apply={apply} onMessage={onMessage} />
     </div>
   );
 }
@@ -152,178 +152,5 @@ function AutoPatchForm({ show, apply, onMessage }: Pick<Props, "show" | "apply" 
         </p>
       </form>
     </section>
-  );
-}
-
-/* ───────────── 현황판 ───────────── */
-
-function PatchBoard({ show, apply }: Pick<Props, "show" | "apply">) {
-  const [picked, setPicked] = useState<PortAddr | null>(null);
-  const [dropOn, setDropOn] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!picked) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPicked(null);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [picked]);
-
-  const keyOf = (p: PortAddr) => `${p.dir}:${p.boxId}:${p.port}`;
-  const swap = (a: PortAddr, b: PortAddr) => {
-    if (a.dir !== b.dir) return;
-    apply((s) => swapPorts(s, a, b));
-  };
-  const press = (p: PortAddr) => {
-    if (!picked) return setPicked(p);
-    if (keyOf(picked) === keyOf(p)) return setPicked(null);
-    if (picked.dir !== p.dir) return setPicked(p);
-    swap(picked, p);
-    setPicked(null);
-  };
-
-  // 박스 없는 포트: 콘솔 본체 단자(OMNI)는 늘, Dante 직결은 쓰고 있을 때만 (그리드에 "Dante 33"처럼 입력)
-  const omni: StageBox = { id: OMNI_BOX, name: "콘솔 본체 (OMNI)", inputs: 16, outputs: 16, location: "박스 없이 콘솔에 바로" };
-  const dante: StageBox = { id: DANTE_BOX, name: "Dante 직결", inputs: 0, outputs: 0, location: "박스 없이 콘솔의 Dante 번호로 — 인풋 표에 “Dante 33”처럼 입력" };
-  const danteUsed = boxUsage(show, DANTE_BOX);
-  const virtual = [omni, ...(danteUsed.ins.size || danteUsed.outs.size ? [dante] : [])];
-  const boxName = (id: string) => [...show.stageBoxes, ...virtual].find((b) => b.id === id)?.name ?? "?";
-
-  return (
-    <section data-esc-layer={picked ? "" : undefined}>
-      <div className="mb-2 flex flex-wrap items-baseline gap-3">
-        <h2 className="text-base font-semibold">패치 현황판</h2>
-        <p className="text-xs text-neutral-500" role="status">
-          {picked
-            ? `${boxName(picked.boxId)} ${picked.dir === "in" ? "인풋" : "아웃풋"} ${picked.port} 선택됨 — 바꿀 포트를 누르세요 (Esc 취소)`
-            : "포트를 끌어다 다른 포트에 놓거나, 누르고 바꿀 포트를 누르면 서로 바뀝니다. 빈 포트에 놓으면 옮겨집니다."}
-        </p>
-      </div>
-      <div className="space-y-6">
-        {show.stageBoxes.map((box) => (
-          <BoxCard key={box.id} show={show} box={box} picked={picked} dropOn={dropOn} setDropOn={setDropOn} onPress={press} onSwap={swap} />
-        ))}
-        {virtual.map((box) => (
-          <BoxCard key={box.id} show={show} box={box} virtual picked={picked} dropOn={dropOn} setDropOn={setDropOn} onPress={press} onSwap={swap} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function BoxCard({
-  show,
-  box,
-  virtual,
-  picked,
-  dropOn,
-  setDropOn,
-  onPress,
-  onSwap,
-}: {
-  show: Show;
-  box: StageBox;
-  /** 박스 없는 포트 묶음: 포트 수 제한이 없고, 쓰는 포트 + 기본 칸 수만큼 보여 준다 */
-  virtual?: boolean;
-  picked: PortAddr | null;
-  dropOn: string | null;
-  setDropOn: (k: string | null) => void;
-  onPress: (p: PortAddr) => void;
-  onSwap: (a: PortAddr, b: PortAddr) => void;
-}) {
-  const { ins, outs } = boxUsage(show, box.id);
-  const maxIn = Math.max(box.inputs, ...ins.keys());
-  const maxOut = Math.max(box.outputs, ...outs.keys());
-
-  const cell = (dir: "in" | "out", port: number) => {
-    const addr: PortAddr = { dir, boxId: box.id, port };
-    const key = `${dir}:${box.id}:${port}`;
-    const over = !virtual && port > (dir === "in" ? box.inputs : box.outputs);
-    let label = "";
-    let sub = "";
-    let color: string | undefined;
-    let count = 0;
-    if (dir === "in") {
-      const users = ins.get(port) ?? [];
-      count = users.length;
-      const ch = users[0] && show.inputs[users[0].channelIndex];
-      if (ch) {
-        label = `${ch.number}${count > 1 ? `+${users.slice(1).map((u) => show.inputs[u.channelIndex].number).join("+")}` : ""}`;
-        sub = ch.shortName || ch.source;
-        color = ch.color === "none" ? undefined : COLOR_SWATCH[ch.color];
-      }
-    } else {
-      const users = outs.get(port) ?? [];
-      count = users.length;
-      const u = users[0];
-      if (u) {
-        const k = u.bus.kind === "aux" ? "Aux" : u.bus.kind === "matrix" ? "Mtx" : "";
-        label = `${k ? `${k} ${u.bus.number}` : u.bus.name}${u.bus.width === "stereo" ? (u.side === 0 ? " L" : u.side === 1 ? " R" : "") : ""}`;
-        sub = k ? u.bus.name : "";
-        if (count > 1) label += ` +${count - 1}`;
-      }
-    }
-    const isPicked = picked && `${picked.dir}:${picked.boxId}:${picked.port}` === key;
-    const bad = count > 1 || (over && count > 0);
-    return (
-      <button
-        key={key}
-        draggable={count > 0}
-        onDragStart={(e) => {
-          e.dataTransfer.setData("text/x-onepatch-port", JSON.stringify(addr));
-          e.dataTransfer.effectAllowed = "move";
-        }}
-        onDragOver={(e) => {
-          if (!e.dataTransfer.types.includes("text/x-onepatch-port")) return;
-          e.preventDefault();
-          setDropOn(key);
-        }}
-        onDragLeave={() => setDropOn(null)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDropOn(null);
-          const raw = e.dataTransfer.getData("text/x-onepatch-port");
-          if (raw) onSwap(JSON.parse(raw), addr);
-        }}
-        onClick={() => onPress(addr)}
-        aria-label={`${box.name} ${dir === "in" ? "인풋" : "아웃풋"} ${port}${label ? ` ${label} ${sub}` : " 비어 있음"}`}
-        aria-pressed={!!isPicked}
-        title={bad ? (count > 1 ? "같은 포트를 여럿이 사용" : "박스 포트 수 초과") : undefined}
-        className={`relative flex h-14 min-w-0 flex-col items-start justify-start overflow-hidden rounded border px-1.5 py-1 text-left text-xs ${
-          count ? "border-neutral-300 bg-white dark:border-neutral-700 dark:bg-neutral-900" : "border-dashed border-neutral-300 text-neutral-400 dark:border-neutral-700"
-        } ${bad ? "border-red-500 bg-red-50 dark:bg-red-950/60" : ""} ${over && !count ? "hidden" : ""} ${isPicked ? "ring-2 ring-blue-600" : ""} ${
-          dropOn === key ? "ring-2 ring-blue-400" : ""
-        } ${count ? "cursor-grab" : ""}`}
-      >
-        {color && <span className="absolute inset-y-0 left-0 w-1" style={{ background: color }} />}
-        <span className="text-[10px] text-neutral-400 tabular-nums">{port}</span>
-        <span className="w-full truncate font-medium">{label}</span>
-        {sub && <span className="w-full truncate text-[10px] text-neutral-500">{sub}</span>}
-      </button>
-    );
-  };
-
-  const grid = "grid grid-cols-4 gap-1 sm:grid-cols-8 lg:grid-cols-16";
-  return (
-    <div className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
-      <div className="mb-2 flex flex-wrap items-baseline gap-2">
-        <h3 className="font-semibold">{box.name}</h3>
-        <span className="text-xs text-neutral-500">{box.location}</span>
-        <span className="ml-auto text-xs text-neutral-500">
-          {virtual ? `사용 인풋 ${ins.size} · 아웃풋 ${outs.size}` : `인풋 ${ins.size}/${box.inputs} · 아웃풋 ${outs.size}/${box.outputs}`}
-        </span>
-      </div>
-      {maxIn > 0 && (
-        <>
-          <p className="mb-1 text-xs font-medium text-neutral-500">인풋</p>
-          <div className={grid}>{Array.from({ length: maxIn }, (_, i) => cell("in", i + 1))}</div>
-        </>
-      )}
-      {maxOut > 0 && (
-        <>
-          <p className="mt-3 mb-1 text-xs font-medium text-neutral-500">아웃풋</p>
-          <div className={grid}>{Array.from({ length: maxOut }, (_, i) => cell("out", i + 1))}</div>
-        </>
-      )}
-    </div>
   );
 }
