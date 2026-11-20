@@ -8,6 +8,7 @@
  */
 import { z } from "zod";
 import { newId } from "./factory";
+import { renameStand } from "./legacy";
 import { bareModel, norm } from "./text";
 import {
   ColorSchema,
@@ -30,7 +31,7 @@ export const LibraryMicSchema = z.object({
   type: MicTypeSchema,
   /** null = 미확인 */
   needsPhantom: z.boolean().nullable(),
-  defaultStand: z.string(),
+  defaultStand: z.string().transform(renameStand),
   /** 보유 수량. null = 수량을 관리하지 않음 */
   owned: z.number().int().min(0).nullable(),
   /** 기본 목록에서 온 항목 (삭제 대신 수정만) */
@@ -67,7 +68,7 @@ export const TemplateChannelSchema = z.object({
   mic: MicrophoneSchema.nullable(),
   /** 라이브러리에 없는 장비의 자유 입력 이름 ("" = 없음) */
   customMic: z.string().default(""),
-  stand: z.string().nullable(),
+  stand: z.string().nullable().transform((v) => (v === null ? null : renameStand(v))),
   phantom: z.boolean().nullable(),
   stereoLinkNext: z.boolean(),
   color: ColorSchema,

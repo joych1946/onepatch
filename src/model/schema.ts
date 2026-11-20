@@ -9,6 +9,7 @@
  *   (채널 순서를 바꾸거나 항목을 삭제해도 참조가 깨지지 않게)
  */
 import { z } from "zod";
+import { renameStand } from "./legacy";
 
 /** JSON 파일 포맷 버전. 구조가 바뀌면 올리고 마이그레이션을 추가한다. */
 export const SCHEMA_VERSION = 1;
@@ -73,8 +74,8 @@ export const MicrophoneSchema = z.object({
   type: MicTypeSchema,
   /** null = 사양 미확인 (추측으로 채우지 않는다) */
   needsPhantom: z.boolean().nullable(),
-  /** 기본 스탠드 (예: 톨붐, 숏붐, 클램프). 없음은 빈 문자열. */
-  defaultStand: z.string(),
+  /** 기본 스탠드 (예: 롱T, 숏T, 클램프). 없음은 빈 문자열. 예전 이름(톨붐·숏붐)은 읽을 때 바꾼다. */
+  defaultStand: z.string().transform(renameStand),
 });
 
 /** 채널에 쓰는 마이크: 라이브러리 참조 또는 라이브러리에 없는 장비의 자유 입력 */
@@ -109,8 +110,8 @@ export const InputChannelSchema = z.object({
   /** 연주자/파트 (예: Drums, Gt.1 김OO) */
   performer: z.string(),
   mic: MicRefSchema.nullable(),
-  /** null = 마이크 기본값을 따름 */
-  stand: z.string().nullable(),
+  /** null = 마이크 기본값을 따름. 예전 이름(톨붐·숏붐)은 읽을 때 바꾼다. */
+  stand: z.string().nullable().transform((v) => (v === null ? null : renameStand(v))),
   /** null = 마이크 기본값을 따름 */
   phantom: z.boolean().nullable(),
   /** null = 아직 패치 안 함 */

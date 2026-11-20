@@ -49,7 +49,7 @@ describe("출력물 데이터", () => {
     const sm57 = eq.mics.find((m) => m.model === "Shure SM57")!;
     expect([sm57.count, sm57.owned, sm57.channels]).toEqual([3, 2, [3, 4, 13]]);
     expect(eq.mics.reduce((n, m) => n + m.count, 0)).toBe(26);
-    expect(eq.stands.find((s) => s.stand === "숏붐")?.count).toBeGreaterThan(0);
+    expect(eq.stands.find((s) => s.stand === "숏T")?.count).toBeGreaterThan(0);
     expect(eq.di).toEqual({ active: 2, passive: 4, unknown: 0, total: 6 }); // J48 2, ProD2 4
     const cable = Object.fromEntries(eq.cables.map((c) => [c.kind, [c.count, c.withSpare]]));
     expect(cable["XLR (무선 수신기 → 박스)"]).toEqual([2, 3]);

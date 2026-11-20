@@ -8,6 +8,7 @@ import { COLOR_LABEL, COLOR_SWATCH, MIC_TYPE_LABEL } from "@/model/labels";
 import { addMic, addSource, findMicByName, libId, type Library, type LibraryMic, type SourceDef } from "@/model/library";
 import { createDefaultLibrary } from "@/model/libraryDefaults";
 import { norm } from "@/model/text";
+import { STAND_NAMES } from "@/model/legacy";
 import { useLibrary } from "./useLibrary";
 
 type Update = (fn: (l: Library) => Library) => void;
@@ -18,7 +19,7 @@ const input =
   "rounded border border-neutral-300 bg-transparent px-2 py-1 outline-none focus:ring-2 focus:ring-blue-600 dark:border-neutral-700";
 const btn =
   "rounded border border-neutral-300 px-2 py-1 hover:bg-neutral-100 disabled:opacity-30 dark:border-neutral-700 dark:hover:bg-neutral-800";
-const STANDS = ["톨붐", "숏붐", "스트레이트", "클램프"];
+const STANDS: readonly string[] = STAND_NAMES;
 
 export default function LibraryView() {
   const { library, error, update } = useLibrary();

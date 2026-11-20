@@ -78,7 +78,7 @@ describe("엑셀 붙여넣기", () => {
       "Shure Beta 91A", "Shure Beta 52A", "Shure SM57", "Neumann KM 184", "AKG C7",
     ]);
     expect(resolvePhantom(s, s.inputs[0])).toBe(true);
-    expect(resolveStand(s, s.inputs[2])).toBe("숏붐"); // 빈 칸 → SM57 기본값
+    expect(resolveStand(s, s.inputs[2])).toBe("숏T"); // 빈 칸 → SM57 기본값
     expect(s.inputs[3].port).toEqual({ kind: "stagebox", stageBoxId: s.stageBoxes[1].id, port: 1 });
     expect(s.inputs[4].port).toEqual({ kind: "local", port: 1 });
     expect(s.inputs[2].notes).toBe("위상 확인");

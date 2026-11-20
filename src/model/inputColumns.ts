@@ -10,6 +10,7 @@ import { COLOR_LABEL, formatPort, MIC_TYPE_LABEL } from "./labels";
 import type { Color, InputChannel, MicRef, PortRef, Show } from "./schema";
 import { ensureShowMic, findMicByName, type LibraryMic } from "./library";
 import { norm } from "./text";
+import { renameStand, STAND_NAMES } from "./legacy";
 
 /** 열 변환에 필요한 Show 밖의 정보 */
 export interface ColCtx {
@@ -96,7 +97,7 @@ export function parseStand(text: string): string | null {
   const t = text.trim();
   if (t === "") return null;
   if (/^(없음|-|—|x|none|n\/a)$/i.test(t)) return "";
-  return t;
+  return renameStand(t);
 }
 
 /**
@@ -236,7 +237,7 @@ export const COLUMNS: Column[] = [
     set: (show, i, text) => updateChannel(show, i, { stand: parseStand(text) }),
     suggestions: (s) =>
       [...new Set([
-        "톨붐", "숏붐", "스트레이트", "클램프", "없음",
+        ...STAND_NAMES, "없음",
         ...s.microphones.map((m) => m.defaultStand),
         ...s.inputs.map((c) => c.stand ?? ""),
       ])].filter(Boolean),

@@ -83,7 +83,7 @@ describe("누르기 입력", () => {
     expect(micName(show, k)).toBe("Shure Beta 91A");
     expect(resolvePhantom(show, k)).toBe(true);
     expect(resolvePhantom(show, show.inputs[1])).toBe(false);
-    expect(resolveStand(show, show.inputs[1])).toBe("숏붐");
+    expect(resolveStand(show, show.inputs[1])).toBe("숏T");
     // 스테레오: 두 채널 + 링크, 같은 마이크
     expect(show.inputs[6].stereoLinkNext).toBe(true);
     expect(show.inputs[7].stereoLinkNext).toBe(false);
@@ -130,7 +130,7 @@ describe("누르기 입력", () => {
     show = COLUMNS[COL_INDEX.mic].set(show, 0, "KM184", { catalog: lib0.microphones })!;
     expect(micName(show, show.inputs[0])).toBe("Neumann KM 184");
     expect(resolvePhantom(show, show.inputs[0])).toBe(true);
-    expect(resolveStand(show, show.inputs[0])).toBe("톨붐");
+    expect(resolveStand(show, show.inputs[0])).toBe("롱T");
     expect(parseShow(show).ok).toBe(true);
   });
 });
