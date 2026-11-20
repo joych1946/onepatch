@@ -108,3 +108,29 @@ describe("마이크/DI 지정·바꾸기·지우기 — 경로별 (3번)", () =>
     cycle(s, 0);
   });
 });
+
+import { equipmentSummary } from "@/model/reports";
+
+describe("무선 (2번)", () => {
+  it("장비 집계표에 무선 채널 수를 따로 센다 (핸드헬드 / 바디팩)", () => {
+    let s = createSampleShow();
+    const hh = lib.microphones.find((m) => m.model === "Shure Axient Digital AD2 (KSM9)")!;
+    const bp = lib.microphones.find((m) => m.model === "Sennheiser EW-DX SK 바디팩 + 헤드셋")!;
+    expect(hh.type).toBe("wireless");
+    expect(bp.needsPhantom).toBe(false);
+    const before = equipmentSummary(s, lib).wireless.total;
+    s = applyMicPick(s, [0], { kind: "library", mic: hh });
+    s = applyMicPick(s, [1, 2], { kind: "library", mic: bp });
+    const w = equipmentSummary(s, lib).wireless;
+    expect(w.total).toBe(before + 3);
+    expect(w.bodypack).toBeGreaterThanOrEqual(2);
+    expect(w.channels).toEqual(expect.arrayContaining([s.inputs[0].number, s.inputs[1].number, s.inputs[2].number]));
+  });
+  it("그리드에서 \"무선\"으로 검색하면 무선만", () => {
+    const show = createSampleShow();
+    const list = filterSuggestions(micCol.suggestions!(show, ctx), "무선", null, micCol.suggestionKeys?.(show, ctx));
+    const byModel = new Map(lib.microphones.map((m) => [m.model, m.type]));
+    expect(list.length).toBeGreaterThan(50);
+    expect(list.every((m) => byModel.get(m) === "wireless" || show.microphones.find((x) => x.model === m)?.type === "wireless")).toBe(true);
+  });
+});

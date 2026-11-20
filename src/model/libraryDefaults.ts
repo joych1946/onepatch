@@ -6,6 +6,7 @@
  */
 import type { Color, MicType } from "./schema";
 import { LIBRARY_VERSION, type Library, type LibraryMic, type SourceDef } from "./library";
+import { norm } from "./text";
 
 type M = [id: string, model: string, type: MicType, phantom: boolean | null, stand: string];
 
@@ -82,13 +83,55 @@ const MICS: M[] = [
   ["mic-di100", "Behringer DI100", DI, null, ""],
 ];
 
+/*
+ * 무선 시스템 (3판). 수신기 출력이 마이크·라인 레벨이라 48V는 쓰지 않는다.
+ * 핸드헬드는 캡슐별, 바디팩은 헤드셋·라벨리어·악기용으로 나눈다 (헤드셋·라벨리어 모델은 현장마다 달라 묶음 이름만).
+ * 캡슐 조합은 제조사 공식 호환 목록으로 확인한 것만 넣는다:
+ * - Shure AD2·ULXD2·QLXD2·SLXD2 사용 설명서 (pubs.shure.com/view/guide/{AD2,ULXD,QLXD,SLXD}), QLXD2/K8 제품 페이지
+ *   SLX-D의 KSM8·SM86·Beta 87C는 "지역에 따라 판매"로 표시된 공식 조합
+ * - Sennheiser EW-DX·EW-D SKM 제품 사양서, Digital 6000·ew G4 액세서리 문서 (docs.cloud.sennheiser.com)
+ * 이미 있던 ULXD(Beta 58A·SM58), QLXD(Beta 58A), ew 500 G4(e935)는 그대로 두고 겹치는 조합은 넣지 않는다.
+ */
+const WIRELESS_SINCE = 3;
+const wl = (prefix: string, system: string, handheld: string, capsules: string[], skip: string[] = []): M[] =>
+  capsules
+    .filter((c) => !skip.includes(c))
+    .map((c) => [`mic-w-${prefix}-${c.toLowerCase().replace(/[^a-z0-9]+/g, "")}`, `${system} ${handheld} (${c})`, W, false, ""]);
+const bodypacks = (prefix: string, system: string, pack: string): M[] => [
+  [`mic-w-${prefix}-hs`, `${system} ${pack} 바디팩 + 헤드셋`, W, false, ""],
+  [`mic-w-${prefix}-lav`, `${system} ${pack} 바디팩 + 라벨리어`, W, false, ""],
+  [`mic-w-${prefix}-inst`, `${system} ${pack} 바디팩 (악기용)`, W, false, ""],
+];
+const SHURE_VOCAL = ["SM58", "Beta 58A", "SM86", "SM87A", "Beta 87A", "Beta 87C", "KSM8", "KSM9", "KSM9HS"];
+const SENN_EVO = ["MMD 835", "MMD 845", "MME 865", "MMD 935", "MMD 945", "MMK 965"];
+const NEUMANN = ["Neumann KK 204", "Neumann KK 205"];
+const WIRELESS: M[] = [
+  ...wl("ad2", "Shure Axient Digital", "AD2", [...SHURE_VOCAL, "KSM11", "VP68", "NXN8/C", "NXN8/S"]),
+  ...bodypacks("ad1", "Shure Axient Digital", "AD1"),
+  ...wl("ulxd2", "Shure ULX-D", "ULXD2", [...SHURE_VOCAL, "NXN8/C", "NXN8/S"], ["SM58", "Beta 58A"]),
+  ...bodypacks("ulxd1", "Shure ULX-D", "ULXD1"),
+  ...wl("qlxd2", "Shure QLX-D", "QLXD2", [...SHURE_VOCAL, "NXN8/C", "NXN8/S"], ["Beta 58A"]),
+  ...bodypacks("qlxd1", "Shure QLX-D", "QLXD1"),
+  ...wl("slxd2", "Shure SLX-D", "SLXD2", ["SM58", "Beta 58A", "Beta 87A", "SM86", "Beta 87C", "KSM8", "NXN8/C", "NXN8/S"]),
+  ...bodypacks("slxd1", "Shure SLX-D", "SLXD1"),
+  ...wl("ewdx", "Sennheiser EW-DX", "SKM", [...SENN_EVO, ...NEUMANN, "MM 435", "MM 445"]),
+  ...bodypacks("ewdx-sk", "Sennheiser EW-DX", "SK"),
+  ...wl("ewd", "Sennheiser EW-D", "SKM-S", [...SENN_EVO, ...NEUMANN, "MM 435", "MM 445"]),
+  ...bodypacks("ewd-sk", "Sennheiser EW-D", "SK"),
+  ...wl("d6000", "Sennheiser Digital 6000", "SKM 6000", [...SENN_EVO, ...NEUMANN, "MM 435", "MM 445", "MD 9235"]),
+  ...bodypacks("d6000-sk", "Sennheiser Digital 6000", "SK 6000"),
+  ...wl("g4", "Sennheiser ew G4", "SKM 100/300/500", SENN_EVO, ["MMD 935"]),
+  ...wl("g4", "Sennheiser ew G4", "SKM 300/500", NEUMANN),
+  ...bodypacks("g4-sk", "Sennheiser ew G4", "SK 100/300/500"),
+];
+
 /** since: 이 항목이 기본 목록에 들어온 판. 기존 저장본에는 그보다 새 항목만 합쳐 넣는다. */
 type G = [id: string, name: string, color: Color, sources: S[], since?: number];
 type Opt = { stereo?: boolean; numbered?: boolean; next?: string[] };
 type S = [id: string, name: string, shortName: string, micIds: string[], opt?: Opt];
 
-/** 기본 목록의 판. 기본 항목을 추가하면 올린다. (2: 국악 악기군) */
-export const SEED_VERSION = 2;
+/** 기본 목록의 판. 기본 항목을 추가하면 올린다. (2: 국악 악기군, 3: 무선 시스템) */
+export const SEED_VERSION = 3;
 
 const ST: Opt = { stereo: true };
 const NUM: Opt = { numbered: true };
@@ -234,7 +277,7 @@ function toSources(list: G[]): SourceDef[] {
 }
 
 export function createDefaultLibrary(): Library {
-  const microphones: LibraryMic[] = MICS.map(([id, model, type, needsPhantom, defaultStand]) => ({
+  const microphones: LibraryMic[] = [...MICS, ...WIRELESS].map(([id, model, type, needsPhantom, defaultStand]) => ({
     id,
     model,
     type,
@@ -264,13 +307,19 @@ export function upgradeLibrary(lib: Library): Library {
   const newer = ALL_GROUPS.filter(([, , , , since = 1]) => since > lib.seedVersion);
   const groupIds = new Set(lib.groups.map((g) => g.id));
   const srcIds = new Set(lib.sources.map((s) => s.id));
-  const micIds = new Set(lib.microphones.map((m) => m.id));
+  // 새 판의 기본 마이크: 같은 id나 같은 모델 이름이 이미 있으면(내가 직접 넣은 것 포함) 넣지 않는다
+  const models = new Set(lib.microphones.map((m) => norm(m.model)));
+  const newMics: LibraryMic[] = (lib.seedVersion < WIRELESS_SINCE ? WIRELESS : [])
+    .filter(([id, model]) => !lib.microphones.some((m) => m.id === id) && !models.has(norm(model)))
+    .map(([id, model, type, needsPhantom, defaultStand]) => ({ id, model, type, needsPhantom, defaultStand, owned: null, builtin: true }));
+  const micIds = new Set([...lib.microphones, ...newMics].map((m) => m.id));
   const added = toSources(newer)
     .filter((s) => !srcIds.has(s.id))
     .map((s) => ({ ...s, micIds: s.micIds.filter((id) => micIds.has(id)) }));
   return {
     ...lib,
     seedVersion: SEED_VERSION,
+    microphones: [...lib.microphones, ...newMics],
     groups: [...lib.groups, ...newer.filter(([id]) => !groupIds.has(id)).map(([id, name]) => ({ id, name }))],
     sources: [...lib.sources, ...added],
   };

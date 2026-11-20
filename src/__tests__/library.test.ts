@@ -38,8 +38,10 @@ function pick(show: ReturnType<typeof createEmptyShow>, lib: Library, index: num
 describe("기본 라이브러리", () => {
   it("스키마에 맞고, 마이크 40~60종, id 중복 없음, 추천은 모두 실제 마이크", () => {
     expect(LibrarySchema.safeParse(lib0).success).toBe(true);
-    expect(lib0.microphones.length).toBeGreaterThanOrEqual(40);
-    expect(lib0.microphones.length).toBeLessThanOrEqual(60);
+    // 유선·DI는 40~60종, 무선 시스템(3판)은 따로 센다
+    const wired = lib0.microphones.filter((m) => !m.id.startsWith("mic-w-"));
+    expect(wired.length).toBeGreaterThanOrEqual(40);
+    expect(wired.length).toBeLessThanOrEqual(60);
     const ids = new Set(lib0.microphones.map((m) => m.id));
     expect(ids.size).toBe(lib0.microphones.length);
     expect(new Set(lib0.sources.map((s) => s.id)).size).toBe(lib0.sources.length);
@@ -238,7 +240,7 @@ describe("국악 소스", () => {
 
   it("추천 마이크는 모두 라이브러리에 있는 모델", () => {
     const ids = new Set(lib0.microphones.map((m) => m.id));
-    expect(lib0.microphones.length).toBe(57); // 새 마이크를 추측해서 추가하지 않음
+    expect(lib0.microphones.filter((m) => !m.id.startsWith("mic-w-")).length).toBe(57); // 국악 때문에 마이크를 추측해서 추가하지 않음
     for (const s of lib0.sources.filter((x) => x.groupId.startsWith("grp-gugak")))
       for (const id of s.micIds) expect(ids.has(id), `${s.name} → ${id}`).toBe(true);
   });
@@ -278,6 +280,29 @@ describe("기존 저장본에 새 기본 항목 합치기", () => {
     expect(src(up, "Snare Top").shortName).toBe("SN");
     expect(up.sources.some((s) => s.id === "src-ride")).toBe(false);
     expect(upgradeLibrary(up)).toBe(up); // 두 번 해도 그대로
+  });
+
+  it("무선 시스템(3판): 저장본에 없는 것만 합치고, 보유 수량·고친 내용·같은 이름 모델은 그대로", () => {
+    const raw = JSON.parse(JSON.stringify(createDefaultLibrary()));
+    raw.seedVersion = 2;
+    raw.microphones = raw.microphones.filter((m: { id: string }) => !m.id.startsWith("mic-w-"));
+    raw.microphones.find((m: { id: string }) => m.id === "mic-ulxd-b58").owned = 4;
+    raw.microphones.find((m: { id: string }) => m.id === "mic-ulxd-b58").model = "ULXD 핸드헬드 B58 (내 이름)";
+    // 내가 직접 넣어 둔 모델 (기본 목록과 같은 이름)
+    raw.microphones.push({ id: "mic-u-mine", model: "Shure QLX-D QLXD2 (KSM9)", type: "wireless", needsPhantom: false, defaultStand: "", owned: 2, builtin: false });
+    const before = raw.microphones.length;
+    const up = upgradeLibrary(LibrarySchema.parse(raw));
+    const addedIds = up.microphones.slice(before).map((m) => m.id);
+    expect(addedIds.length).toBeGreaterThan(50);
+    expect(addedIds.every((id) => id.startsWith("mic-w-"))).toBe(true);
+    expect(up.microphones.filter((m) => m.model === "Shure QLX-D QLXD2 (KSM9)")).toHaveLength(1);
+    expect(up.microphones.find((m) => m.id === "mic-ulxd-b58")).toMatchObject({ owned: 4, model: "ULXD 핸드헬드 B58 (내 이름)" });
+    expect(up.microphones.every((m) => m.type !== "wireless" || m.needsPhantom === false)).toBe(true);
+    // 이미 있던 조합(ULX-D SM58·Beta 58A, QLX-D Beta 58A, G4 MMD 935)은 겹쳐 넣지 않는다
+    const models = up.microphones.map((m) => m.model);
+    expect(models.filter((m) => /ULX-D ULXD2 \((SM58|Beta 58A)\)|QLX-D QLXD2 \(Beta 58A\)|ew G4 .*\(MMD 935\)/.test(m))).toEqual([]);
+    expect(new Set(up.microphones.map((m) => m.id)).size).toBe(up.microphones.length);
+    expect(upgradeLibrary(up)).toBe(up);
   });
 
   it("IndexedDB: 예전 저장본을 열면 합쳐서 다시 저장", async () => {

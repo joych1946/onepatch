@@ -179,6 +179,8 @@ export interface EquipmentSummary {
   mics: { model: string; type: MicType | null; count: number; owned: number | null; channels: number[] }[];
   stands: { stand: string; count: number; channels: number[] }[];
   di: { active: number; passive: number; unknown: number; total: number };
+  /** 무선 채널 (수신기 채널 수 = 무선 마이크를 쓴 인풋 채널). 핸드헬드/바디팩은 모델 이름으로 나눈다 */
+  wireless: { total: number; handheld: number; bodypack: number; channels: number[] };
   cables: { kind: string; count: number; withSpare: number; note: string }[];
   spare: number;
 }
@@ -193,6 +195,7 @@ export function equipmentSummary(show: Show, lib: Library | null, sparePercent =
   const mics = new Map<string, EquipmentSummary["mics"][number]>();
   const stands = new Map<string, EquipmentSummary["stands"][number]>();
   const di = { active: 0, passive: 0, unknown: 0, total: 0 };
+  const wireless = { total: 0, handheld: 0, bodypack: 0, channels: [] as number[] };
   let xlrMic = 0;
   let xlrWireless = 0;
   let ts = 0;
@@ -212,6 +215,12 @@ export function equipmentSummary(show: Show, lib: Library | null, sparePercent =
       cur.count++;
       cur.channels.push(c.number);
       stands.set(stand, cur);
+    }
+    if (snap?.type === "wireless") {
+      wireless.total++;
+      wireless.channels.push(c.number);
+      if (/바디팩|bodypack|beltpack|\bSK\b/i.test(snap.model)) wireless.bodypack++;
+      else wireless.handheld++;
     }
     if (snap?.type === "di") {
       di.total++;
@@ -242,6 +251,7 @@ export function equipmentSummary(show: Show, lib: Library | null, sparePercent =
     mics: [...mics.values()].sort(byCount),
     stands: [...stands.values()].sort(byCount),
     di,
+    wireless,
     cables,
     spare: sparePercent,
   };

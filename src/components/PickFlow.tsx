@@ -84,6 +84,8 @@ export default function PickFlow({ show, library, start, renumber, apply, update
   const [query, setQuery] = useState("");
   const [hi, setHi] = useState(0);
   const [prompt, setPrompt] = useState<Prompt>(null);
+  /** 마이크 목록을 종류로 거르기 (null = 전체) */
+  const [micType, setMicType] = useState<MicType | null>(null);
   /** 마지막으로 쓴 악기군 (앞일수록 최근) */
   const [recent, setRecent] = useState<string[]>(() => readList(RECENT_KEY) ?? []);
   /** 펼쳐 둔 악기군. 저장된 적이 없으면 맨 위 악기군만 펼친다. */
@@ -270,7 +272,8 @@ export default function PickFlow({ show, library, start, renumber, apply, update
       run: () => pickMic({ kind: "library", mic: o.mic }),
     });
     const { recommended, others } = micOptions(library, show, step.src);
-    const match = (o: MicOption) => !q || norm(o.mic.model).includes(q);
+    const match = (o: MicOption) =>
+      (!micType || o.mic.type === micType) && (!q || norm(o.mic.model).includes(q) || norm(MIC_TYPE_LABEL[o.mic.type]).includes(q));
     const out: Section[] = [];
     const rec = recommended.filter(match);
     if (rec.length) out.push({ title: step.src ? "추천 (보유 장비 먼저)" : "추천", items: rec.map((o) => micItem(o, "rec-")) });
@@ -288,7 +291,7 @@ export default function PickFlow({ show, library, start, renumber, apply, update
     });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, q, query, library, show, row, open, groupOrder]);
+  }, [step, q, query, library, show, row, open, groupOrder, micType]);
 
   const flat = sections.flatMap((s) => (s.header ? [s.header, ...s.items] : s.items));
   const hiClamped = Math.min(hi, Math.max(0, flat.length - 1));
@@ -417,6 +420,26 @@ export default function PickFlow({ show, library, start, renumber, apply, update
                 spellCheck={false}
                 className="w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-blue-600 dark:border-neutral-700"
               />
+              {step.kind === "mic" && (
+                <div className="mt-2 flex flex-wrap gap-1.5 text-xs" role="group" aria-label="마이크 종류">
+                  {([null, ...(Object.keys(MIC_TYPE_LABEL) as MicType[])] as (MicType | null)[]).map((t) => (
+                    <button
+                      key={t ?? "all"}
+                      onClick={() => {
+                        setMicType(t);
+                        setHi(0);
+                        searchRef.current?.focus();
+                      }}
+                      aria-pressed={micType === t}
+                      className={`rounded-full border px-2.5 py-1 ${
+                        micType === t ? "border-blue-600 bg-blue-50 font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300" : "border-neutral-300 dark:border-neutral-700"
+                      }`}
+                    >
+                      {t ? MIC_TYPE_LABEL[t] : "전체"}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div ref={listRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-3">
               {sections.map((sec, si) => (

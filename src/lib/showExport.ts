@@ -66,6 +66,7 @@ export function buildShowXlsx(show: Show, lib: Library | null, inputCols: Report
       ...eq.mics.map((m) => ["마이크·DI", `${m.model}${m.type ? ` (${micTypeLabel(m.type)})` : ""}`, m.count, m.owned ?? "", `Ch ${m.channels.join(", ")}`]),
       ...eq.stands.map((s) => ["스탠드", s.stand, s.count, "", `Ch ${s.channels.join(", ")}`]),
       ["DI", "액티브 / 패시브 / 미확인", eq.di.total, "", `${eq.di.active} / ${eq.di.passive} / ${eq.di.unknown}`],
+      ["무선", "수신기 채널 (핸드헬드 / 바디팩)", eq.wireless.total, "", `${eq.wireless.handheld} / ${eq.wireless.bodypack}${eq.wireless.channels.length ? ` · Ch ${eq.wireless.channels.join(", ")}` : ""}`],
       ...eq.cables.map((c) => ["케이블", c.kind, c.count, c.withSpare, `${c.note} · 여분 ${eq.spare}%`]),
     ],
   });
