@@ -9,6 +9,7 @@ import type { Show, StageBox } from "@/model/schema";
 import { COLOR_SWATCH } from "@/model/labels";
 import { autoPatch, boxColumns, boxOps, boxRemovalLoss, boxUsage, DANTE_BOX, OMNI_BOX, swapPorts, type PortAddr } from "@/model/patch";
 import { formatRanges, parseRanges } from "@/model/outputOps";
+import { STAGEBOX_MODELS } from "@/model/stageboxModels";
 import Sheet from "./Sheet";
 import type { ValidationIssue } from "./useShowDoc";
 
@@ -31,6 +32,26 @@ export default function PatchView({ show, apply, undo, redo, issues, onMessage, 
       <section>
         <div className="mb-2 flex flex-wrap items-baseline gap-3">
           <h2 className="text-base font-semibold">스테이지박스 ({show.stageBoxes.length})</h2>
+          <select
+            className="rounded border border-blue-500 bg-transparent px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-300"
+            value=""
+            aria-label="기종을 골라 스테이지박스 추가"
+            onChange={(e) => {
+              const name = e.target.value;
+              apply((s) => {
+                const x = boxOps.append(s);
+                return boxColumns()[0].set(x, x.stageBoxes.length - 1, name) ?? x;
+              });
+              onMessage(`${name} 박스를 추가했습니다. 인풋·아웃풋 수는 표에서 고칠 수 있습니다.`);
+            }}
+          >
+            <option value="" disabled>기종으로 박스 추가…</option>
+            {STAGEBOX_MODELS.map((m) => (
+              <option key={m.name} value={m.name}>
+                {m.maker} {m.name} — 인 {m.inputs} / 아웃 {m.outputs}{m.note ? ` (${m.note})` : ""}
+              </option>
+            ))}
+          </select>
           <p className="text-xs text-neutral-500">맨 아래 빈 행에 입력하면 박스 추가 · 인풋·아웃풋 수는 아무 숫자나 · 이름·위치·순서를 바꿔도 패치는 그대로 · ⌥⌫ 삭제(비워지는 패치가 있으면 먼저 알려줌)</p>
         </div>
         <Sheet

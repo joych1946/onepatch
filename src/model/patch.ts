@@ -3,6 +3,7 @@
  * 포트 정보는 채널(port)과 버스(ports)에만 있다. 현황판은 거기서 계산해 보여줄 뿐이다.
  */
 import { newId } from "./factory";
+import { findStageBoxModel, STAGEBOX_MODELS } from "./stageboxModels";
 import type { RowOps } from "./outputOps";
 import type { OutputBus, PortRef, Show, StageBox } from "./schema";
 import type { SheetColumn } from "./sheet";
@@ -238,8 +239,15 @@ export function boxColumns(): SheetColumn<StageBox>[] {
       aliases: ["name", "box", "stagebox", "이름", "박스", "모델"],
       width: "min-w-32",
       text: (_s, b) => b.name,
-      set: (show, i, text) => (text.trim() ? setBox(show, i, { name: text.trim() }) : null),
-      suggestions: () => ["Rio3224", "Rio1608", "Rio3224-D2", "Rio1608-D2", "Tio1608-D", "Ri8-D", "Ro8-D", "DL32", "AD8HR"],
+      // 기종 목록의 이름을 고르면 인풋·아웃풋 수도 채운다 (이름을 그 기종으로 바꿀 때만 — 그 뒤 수는 자유롭게 고침)
+      set(show, i, text) {
+        const name = text.trim();
+        if (!name) return null;
+        const model = findStageBoxModel(name);
+        const changed = name !== show.stageBoxes[i]?.name;
+        return setBox(show, i, model && changed ? { name: model.name, inputs: model.inputs, outputs: model.outputs } : { name });
+      },
+      suggestions: () => [...STAGEBOX_MODELS.map((m) => m.name), "Rio3224", "Rio1608", "Tio1608-D", "Ri8-D", "Ro8-D", "DL32", "AD8HR"],
     },
     {
       key: "inputs",

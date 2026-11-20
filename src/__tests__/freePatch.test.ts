@@ -187,3 +187,25 @@ describe("Main 없는 Show (7번)", () => {
     expect(stereo).toEqual([]);
   });
 });
+
+import { STAGEBOX_MODELS } from "@/model/stageboxModels";
+
+describe("스테이지박스 기종 (1번)", () => {
+  it("Rio D2·D3 기종을 고르면 이름과 포트 수가 채워지고, 그 뒤에 고칠 수 있다", () => {
+    const want: Record<string, [number, number]> = { "Rio3224-D2": [32, 16], "Rio1608-D2": [16, 8], "Rio3224-D3": [32, 16], "Rio1608-D3": [16, 8] };
+    expect(Object.fromEntries(STAGEBOX_MODELS.map((m) => [m.name, [m.inputs, m.outputs]]))).toEqual(want);
+    for (const [name, [i, o]] of Object.entries(want)) {
+      let s = boxOps.append(createSampleShow());
+      const r = s.stageBoxes.length - 1;
+      s = setBoxCell(s, r, "name", name.toLowerCase().replace("-", " "));
+      expect(s.stageBoxes[r]).toMatchObject({ name, inputs: i, outputs: o });
+      s = setBoxCell(s, r, "inputs", "13");
+      s = setBoxCell(s, r, "location", "무대 하수");
+      expect(s.stageBoxes[r]).toMatchObject({ name, inputs: 13, outputs: o });
+    }
+  });
+  it("기종이 아닌 이름은 포트 수를 건드리지 않는다", () => {
+    const s = setBoxCell(createSampleShow(), 1, "name", "SR Box");
+    expect(s.stageBoxes[1]).toMatchObject({ name: "SR Box", inputs: 16, outputs: 8 });
+  });
+});
