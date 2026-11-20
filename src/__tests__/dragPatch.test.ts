@@ -1,7 +1,8 @@
 /** 끌어다 놓기 패치 (보완) */
 import { describe, expect, it } from "vitest";
 import { createSampleShow } from "@/sample/fivePieceBand";
-import { busGroups, channelGroups, dropConflicts, dropGroups, swapUnitInto, unitsAt, unpatchUnits } from "@/model/dragPatch";
+import { busGroups, channelGroups, dropConflicts, dropGroups, replacePort, swapUnitInto, unitsAt, unpatchUnits } from "@/model/dragPatch";
+import { swapPorts } from "@/model/patch";
 import { COLUMNS, COL_INDEX } from "@/model/inputColumns";
 import { formatPort } from "@/model/labels";
 import { busesOf } from "@/model/outputOps";
@@ -134,5 +135,31 @@ describe("아웃풋 버스 끌어다 놓기", () => {
     const s = dropGroups(s0, "out", busGroups(s0, [aux1.id]), p.stageBoxId, p.port, "overwrite").show;
     expect(s.outputs.find((b) => b.id === aux1.id)!.ports).toEqual([aux2.ports[0]]);
     expect(s.outputs.find((b) => b.id === aux2.id)!.ports).toEqual([]);
+  });
+});
+
+describe("포트 → 포트", () => {
+  it("사용 중인 포트에 교체: 옮긴 것은 그 포트로, 있던 것은 패치 해제 / 서로 바꾸기는 예전 그대로", () => {
+    const s0 = createSampleShow();
+    const [a, b] = s0.stageBoxes;
+    const from = { dir: "in" as const, boxId: a.id, port: 5 };
+    const to = { dir: "in" as const, boxId: b.id, port: 3 };
+    const mover = (unitsAt(s0, "in", a.id, 5)[0] as { channelId: string }).channelId;
+    const sitter = (unitsAt(s0, "in", b.id, 3)[0] as { channelId: string }).channelId;
+    const r = replacePort(s0, from, to);
+    expect(formatPort(r.inputs.find((c) => c.id === mover)!.port, r.stageBoxes)).toBe(`${b.name} 3`);
+    expect(r.inputs.find((c) => c.id === sitter)!.port).toBeNull();
+    expect(unitsAt(r, "in", a.id, 5)).toEqual([]);
+    const w = swapPorts(s0, from, to);
+    expect(formatPort(w.inputs.find((c) => c.id === sitter)!.port, w.stageBoxes)).toBe(`${a.name} 5`);
+  });
+  it("출력 포트도: 다른 버스가 있는 포트에 교체하면 그 버스의 출력이 비워진다", () => {
+    const s0 = createSampleShow();
+    const [aux1, aux2] = busesOf(s0, "aux");
+    const p1 = aux1.ports[0] as { stageBoxId: string; port: number };
+    const p2 = aux2.ports[0] as { stageBoxId: string; port: number };
+    const r = replacePort(s0, { dir: "out", boxId: p1.stageBoxId, port: p1.port }, { dir: "out", boxId: p2.stageBoxId, port: p2.port });
+    expect(r.outputs.find((b) => b.id === aux1.id)!.ports).toEqual([aux2.ports[0]]);
+    expect(r.outputs.find((b) => b.id === aux2.id)!.ports).toEqual([]);
   });
 });

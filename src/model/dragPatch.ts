@@ -9,7 +9,7 @@
  * 한 번 놓기 = Show 변경 한 번 → 실행 취소 한 번으로 돌아간다.
  */
 import { busShort } from "./outputColumns";
-import { DANTE_BOX, groupOf, OMNI_BOX, refAt, setPortAt, type PortDir } from "./patch";
+import { DANTE_BOX, groupOf, OMNI_BOX, refAt, setPortAt, swapPorts, type PortAddr, type PortDir } from "./patch";
 import type { PortRef, Show } from "./schema";
 
 export type DropUnit = { dir: "in"; channelId: string } | { dir: "out"; busId: string; side: number };
@@ -223,4 +223,15 @@ export function currentPort(show: Show, u: DropUnit): PortRef | null {
 /** 포트(현황판 칸)에 있는 유닛들 — 칸을 목록으로 끌어내 해제할 때 */
 export function unitsAt(show: Show, dir: PortDir, boxId: string, port: number): DropUnit[] {
   return occupancy(show, dir).get(portKey(refAt(boxId, port))) ?? [];
+}
+
+/**
+ * 포트 → 포트 교체: from 포트에 있던 것을 to 포트로 옮기고, to 포트에 있던 것은 패치 해제.
+ * (서로 바꾸기는 patch.swapPorts)
+ */
+export function replacePort(show: Show, from: PortAddr, to: PortAddr): Show {
+  if (from.dir !== to.dir || (from.boxId === to.boxId && from.port === to.port)) return show;
+  const moving = new Set(unitsAt(show, from.dir, from.boxId, from.port).map(unitKey));
+  const displaced = unitsAt(show, to.dir, to.boxId, to.port).filter((u) => !moving.has(unitKey(u)));
+  return swapPorts(unpatchUnits(show, displaced), from, to);
 }
