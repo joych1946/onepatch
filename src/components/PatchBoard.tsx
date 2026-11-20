@@ -6,7 +6,7 @@
  * 끌기는 포인터 이벤트로 직접 처리한다 — 마우스는 조금 움직이면, 폰·태블릿은 길게 누르면 끌기 시작.
  * 끄는 중 화면 가장자리에 가면 자동 스크롤, Esc로 취소. 놓을 곳은 data-drop 속성으로 찾는다.
  * - 목록의 채널(여러 개 골라도 됨)·버스 → 포트: 그 포트부터 차례로 패치 (다른 것이 있으면 묻기)
- * - 포트 → 포트: 빈 포트면 옮기기, 사용 중이면 교체 / 서로 바꾸기를 묻기
+ * - 포트 → 포트(끌기·차례로 누르기): 빈 포트면 옮기기, 사용 중이면 교체 / 서로 바꾸기를 묻기
  * - 포트·패치된 채널 → 목록: 패치 해제
  * 끌기가 불편하면: 목록에서 누르고(여러 개) → 포트를 누르기 / 키보드로 고르고 포트에서 Enter.
  * 모든 변경은 apply 한 번 = 실행 취소 한 번.
@@ -169,29 +169,30 @@ export default function PatchBoard({ show, apply, onMessage }: Props) {
       }
       return;
     }
-    if (payload.kind === "port") {
-      const from = payload.addr;
-      const to = target.addr;
-      if (sameAddr(from, to)) return;
-      const there = unitsAt(show, to.dir, to.boxId, to.port);
-      // 빈 포트면 바로 옮기기, 사용 중이면 묻기
-      if (!there.length) return apply((s) => swapPorts(s, from, to));
-      const mine = unitsAt(show, from.dir, from.boxId, from.port);
-      setAsk({
-        title: `${boxName(to.boxId)} ${to.port}번에 이미 다른 것이 있습니다`,
-        lines: [
-          `옮길 것: ${boxName(from.boxId)} ${from.port} — ${mine.map((u) => unitLabel(show, u)).join(", ")}`,
-          `있는 것: ${boxName(to.boxId)} ${to.port} — ${there.map((u) => unitLabel(show, u)).join(", ")}`,
-        ],
-        options: [
-          { label: "교체 (있던 것은 패치 해제)", run: () => apply((s) => replacePort(s, from, to)) },
-          { label: "서로 바꾸기", run: () => apply((s) => swapPorts(s, from, to)) },
-        ],
-      });
-      return;
-    }
+    if (payload.kind === "port") return portToPort(payload.addr, target.addr);
     placeGroups(payload.dir, payload.groups, target.addr);
   };
+
+  /** 포트 → 포트 (끌기·누르기 공통): 빈 포트면 바로 옮기기, 사용 중이면 교체 / 서로 바꾸기를 묻기 */
+  const portToPort = (from: PortAddr, to: PortAddr) => {
+    if (sameAddr(from, to) || from.dir !== to.dir) return;
+    const mine = unitsAt(show, from.dir, from.boxId, from.port);
+    const there = unitsAt(show, to.dir, to.boxId, to.port);
+    // 어느 한쪽이 비어 있으면(옮기기) 바로, 둘 다 사용 중이면 묻기
+    if (!there.length || !mine.length) return apply((s) => swapPorts(s, from, to));
+    setAsk({
+      title: `${boxName(to.boxId)} ${to.port}번에 이미 다른 것이 있습니다`,
+      lines: [
+        `옮길 것: ${boxName(from.boxId)} ${from.port} — ${mine.map((u) => unitLabel(show, u)).join(", ")}`,
+        `있는 것: ${boxName(to.boxId)} ${to.port} — ${there.map((u) => unitLabel(show, u)).join(", ")}`,
+      ],
+      options: [
+        { label: "교체 (있던 것은 패치 해제)", run: () => apply((s) => replacePort(s, from, to)) },
+        { label: "서로 바꾸기", run: () => apply((s) => swapPorts(s, from, to)) },
+      ],
+    });
+  };
+
 
   /* ───────── 끌기 (포인터) ───────── */
 
@@ -264,8 +265,8 @@ export default function PatchBoard({ show, apply, onMessage }: Props) {
     if (!picked) return setPicked(addr);
     if (sameAddr(picked, addr)) return setPicked(null);
     if (picked.dir !== addr.dir) return setPicked(addr);
-    apply((s) => swapPorts(s, picked, addr));
     setPicked(null);
+    portToPort(picked, addr);
   };
 
   const pressItem = (id: string, e: React.MouseEvent | React.KeyboardEvent, order: string[]) => {
