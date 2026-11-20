@@ -447,7 +447,14 @@ function planOutputs({ show, cur, P, record, warn, note }: OutCtx, processing: M
       for (let p = 0; p < b.outputs && start + p <= danteCount; p++)
         managed.push({ sec: "Dante", index: start + p - 1, label: `Dante OUT ${start + p}` });
     }
-    for (const m of managed) if (!written.has(`${m.sec}:${m.index}`)) setPort(m.sec, m.index, m.label, 0);
+    // Show에 그 Stereo에 해당하는 Main이 없으면(예: Main을 지운 Show) 기준 파일의 Stereo 출력 패치는 그대로 둔다
+    const stereoInShow = new Set(alloc.filter((a) => a.bus.kind === "main").map((a) => (a.label === "Stereo A" ? "A" : "B")));
+    const keepStereo = (sec: "Omni" | "Dante", index: number) => {
+      const v = readUint(cur, locate(processing, [sec, ["OutputPort", index], "Patch", "Source"]));
+      const which = v === STEREO_A || v === STEREO_A + 1 ? "A" : v === STEREO_B || v === STEREO_B + 1 ? "B" : null;
+      return which !== null && !stereoInShow.has(which);
+    };
+    for (const m of managed) if (!written.has(`${m.sec}:${m.index}`) && !keepStereo(m.sec, m.index)) setPort(m.sec, m.index, m.label, 0);
   }
   return alloc.map((a) => ({ bus: a.bus.name || `${a.bus.kind} ${a.bus.number}`, dm7: a.label }));
 }

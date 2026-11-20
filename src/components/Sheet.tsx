@@ -528,7 +528,7 @@ export default function Sheet<T>({
                         e.preventDefault();
                         if (col.pick && onPick && !e.shiftKey) return openPick(r, col.key);
                         // 이미 고른 칸을 다시 누르면 후보 목록을 연다
-                        if (isActive && !e.shiftKey && !edit && col.suggestions && !col.readOnly && row) {
+                        if (isActive && document.activeElement === inputRef.current && !e.shiftKey && !edit && col.suggestions && !col.readOnly && row) {
                           startEdit(col, row);
                           focusGrid();
                           return;

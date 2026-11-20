@@ -783,7 +783,7 @@ export default function InputGrid({
                           e.preventDefault(); // 브라우저가 포커스를 body로 옮기지 않게
                           if (col.key === "ch" && !e.shiftKey) return openPicker(r);
                           // 이미 고른 칸을 다시 누르면 후보 목록을 연다 (마이크 → DI처럼 클릭만으로 바꾸기)
-                          if (isActive && !e.shiftKey && !edit && col.suggestions && ch) {
+                          if (isActive && document.activeElement === inputRef.current && !e.shiftKey && !edit && col.suggestions && ch) {
                             startEdit(col, ch);
                             focusGrid();
                             return;

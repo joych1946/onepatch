@@ -141,3 +141,49 @@ describe("아웃풋 물리 출력 자유 지정 (6번)", () => {
   });
 });
 type PortRefT = import("@/model/schema").PortRef;
+
+import { createEmptyShow } from "@/model/factory";
+import { rowOps, busAccess } from "@/model/outputOps";
+import { channelLabels, equipmentSummary, inputReportRows, outputReportSections, patchSheet } from "@/model/reports";
+import { buildSharePayload } from "@/model/share";
+import { consoleTasks } from "@/export/dm7/tasks";
+import { diffShows } from "@/model/versions";
+import { createDefaultLibrary } from "@/model/libraryDefaults";
+
+/** 인쇄·공유·콘솔 할 일·변경분 — 출력물 전부를 만들어 본다 */
+function buildPrintable(s: Show) {
+  inputReportRows(s);
+  outputReportSections(s);
+  s.stageBoxes.forEach((b) => patchSheet(s, b.id));
+  equipmentSummary(s, createDefaultLibrary());
+  channelLabels(s);
+  consoleTasks(s);
+  diffShows(createSampleShow(), s);
+  buildSharePayload(s, { show: createSampleShow(), label: "v1", at: new Date().toISOString() });
+}
+
+describe("Main 없는 Show (7번)", () => {
+  const noMain = () => {
+    const s = createSampleShow();
+    const ops = rowOps(busAccess("main"));
+    return ops.remove(s, 0, ops.count(s) - 1, false);
+  };
+  it("Main 행을 지울 수 있고 저장 검증·Matrix 소스 정리가 된다", () => {
+    const s = noMain();
+    expect(busesOf(s, "main")).toEqual([]);
+    expect(parseShow(JSON.parse(JSON.stringify(s))).ok).toBe(true);
+    expect(checkShow(s).errors).toEqual([]);
+  });
+  it("인쇄·공유 내용이 오류 없이 만들어진다", () => {
+    expect(() => buildPrintable(noMain())).not.toThrow();
+    expect(() => buildPrintable({ ...createEmptyShow(), outputs: [] })).not.toThrow();
+  });
+  it.skipIf(!existsSync(BASIC))("DM7 내보내기: 오류 없이, 기준 파일의 Stereo 출력 패치는 건드리지 않는다 (샘플 필요)", () => {
+    const s = noMain();
+    const file = parseDm7File(new Uint8Array(readFileSync(BASIC)));
+    const all: Record<Dm7Item, boolean> = { name: true, color: true, icon: true, patch: true, phantom: true, pair: true, dca: true, mute: true, outPatch: true, busNames: true };
+    const plan = planDm7(s, file, { ...defaultDm7Options(s), items: all, clearUnusedOutputs: true });
+    const stereo = plan.changes.filter((c) => /Stereo/.test(`${c.before} ${c.after} ${c.target}`));
+    expect(stereo).toEqual([]);
+  });
+});
