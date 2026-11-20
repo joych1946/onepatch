@@ -6,7 +6,7 @@
 import { micName, resolvePhantom, resolveStand } from "./derive";
 import { newId } from "./factory";
 import { updateChannel } from "./inputOps";
-import { COLOR_LABEL, formatPort } from "./labels";
+import { COLOR_LABEL, formatPort, MIC_TYPE_LABEL } from "./labels";
 import type { Color, InputChannel, MicRef, PortRef, Show } from "./schema";
 import { ensureShowMic, findMicByName, type LibraryMic } from "./library";
 import { norm } from "./text";
@@ -45,6 +45,8 @@ export interface Column {
   set(show: Show, index: number, text: string, ctx?: ColCtx): Show | null;
   /** 편집 중 보여줄 후보 */
   suggestions?(show: Show, ctx?: ColCtx): string[];
+  /** 후보를 이름 말고도 찾을 검색어 (예: 마이크 종류 "DI", "무선") */
+  suggestionKeys?(show: Show, ctx?: ColCtx): (value: string) => string;
 }
 
 /* ───────────── 파서 ───────────── */
@@ -219,6 +221,11 @@ export const COLUMNS: Column[] = [
     suggestions: (s, ctx) => [
       ...new Set([...s.microphones.map((m) => m.model), ...(ctx?.catalog ?? []).map((m) => m.model)]),
     ],
+    suggestionKeys(s, ctx) {
+      const types = new Map<string, string>();
+      for (const m of [...(ctx?.catalog ?? []), ...s.microphones]) types.set(m.model, `${m.type} ${MIC_TYPE_LABEL[m.type]}`);
+      return (model) => types.get(model) ?? "";
+    },
   },
   {
     key: "stand",

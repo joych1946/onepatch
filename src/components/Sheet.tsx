@@ -15,10 +15,11 @@ import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } f
 import type { Show } from "@/model/schema";
 import type { RowOps } from "@/model/outputOps";
 import { parseTsv, toTsv } from "@/model/inputPaste";
-import { sheetPaste, type SheetColumn } from "@/model/sheet";
+import { filterSuggestions, sheetPaste, type SheetColumn } from "@/model/sheet";
 
 type Pos = { r: number; c: number };
-type Edit = { mode: "enter" | "edit"; text: string; sug: number };
+/** start: 편집을 시작할 때의 칸 값 (그대로면 후보를 거르지 않음). 글자를 쳐서 시작했으면 null */
+type Edit = { mode: "enter" | "edit"; text: string; sug: number; start: string | null };
 
 export interface SheetHandle {
   focus(where: "top" | "bottom"): void;
@@ -85,6 +86,10 @@ export default function Sheet<T>({
   const setEdit = (e: Edit | null) => {
     editRef.current = e;
     setEditState(e);
+  };
+  const startEdit = (col: SheetColumn<T>, row: T | undefined) => {
+    const text = row ? (col.editText ?? col.text)(show, row) : "";
+    setEdit({ mode: "edit", text, sug: -1, start: text });
   };
   const [tabStart, setTabStart] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -269,11 +274,7 @@ export default function Sheet<T>({
   const suggestions = (() => {
     const col = columns[a.c];
     if (!edit || !col.suggestions) return [];
-    const q = edit.text.trim().toLowerCase();
-    return col
-      .suggestions(show)
-      .filter((s) => s.toLowerCase().includes(q) && s.toLowerCase() !== q)
-      .slice(0, 8);
+    return filterSuggestions(col.suggestions(show), edit.text, edit.start);
   })();
 
   const nextAfterTab = (back: boolean) => {
@@ -423,7 +424,7 @@ export default function Sheet<T>({
         else if (col.toggle) toggleSelection();
         else {
           const row = rows[a.r];
-          setEdit({ mode: "edit", text: row ? (col.editText ?? col.text)(show, row) : "", sug: -1 });
+          startEdit(col, row);
         }
         return;
       case " ":
@@ -466,7 +467,7 @@ export default function Sheet<T>({
       if (v) change((s) => target.reduce((x, r) => setCell(x, r, col, v) ?? x, s));
       return;
     }
-    setEdit({ mode: "enter", text: value, sug: -1 });
+    setEdit({ mode: "enter", text: value, sug: -1, start: null });
   };
 
   const openPick = (r: number, colKey: string) => {
@@ -519,6 +520,12 @@ export default function Sheet<T>({
                         if (isActive && editRef.current) return;
                         e.preventDefault();
                         if (col.pick && onPick && !e.shiftKey) return openPick(r, col.key);
+                        // 이미 고른 칸을 다시 누르면 후보 목록을 연다
+                        if (isActive && !e.shiftKey && !edit && col.suggestions && !col.readOnly && row) {
+                          startEdit(col, row);
+                          focusGrid();
+                          return;
+                        }
                         if (editRef.current) commit(editRef.current.text, false);
                         moveTo(r, c, e.shiftKey);
                         setTabStart(null);
@@ -527,7 +534,7 @@ export default function Sheet<T>({
                       onDoubleClick={() => {
                         if (col.readOnly) return;
                         if (col.toggle) return toggleSelection();
-                        setEdit({ mode: "edit", text: row ? (col.editText ?? col.text)(show, row) : "", sug: -1 });
+                        startEdit(col, row);
                       }}
                       className={`relative h-8 border-l border-neutral-200 px-2 whitespace-nowrap first:border-l-0 dark:border-neutral-800 ${
                         col.pick ? "cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-950/40" : ""
@@ -563,10 +570,11 @@ export default function Sheet<T>({
                             }`}
                           />
                           {edit && suggestions.length > 0 && (
-                            <ul className="absolute top-full left-0 z-20 mt-0.5 min-w-48 rounded border border-neutral-300 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
+                            <ul className="absolute top-full left-0 z-20 mt-0.5 max-h-72 min-w-48 overflow-y-auto rounded border border-neutral-300 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
                               {suggestions.map((s, i) => (
                                 <li
                                   key={s}
+                                  ref={i === edit.sug ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
                                   onMouseDown={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();

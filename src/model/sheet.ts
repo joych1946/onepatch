@@ -84,3 +84,28 @@ export function sheetPaste<T>(
   });
   return { show: s, rowCount: rows.length, headerMap, skipped };
 }
+
+/**
+ * 편집 칸의 후보 목록 거르기 (인풋 그리드·공통 표가 같이 쓴다).
+ * - 편집을 막 시작해 칸의 글자가 원래 값 그대로면 거르지 않고 전부 보여준다.
+ *   (마이크가 들어 있는 칸에서 다른 모델·DI로 바꿀 때 지우지 않고 바로 고를 수 있게)
+ * - 글자를 고치면 후보 이름이나 덧붙인 검색어(keys: 종류 "DI", "무선" 등)에 들어 있는 것만.
+ */
+export function filterSuggestions(
+  all: string[],
+  text: string,
+  startText: string | null,
+  keys?: (value: string) => string,
+  limit = 300,
+): string[] {
+  const q = text.trim().toLowerCase();
+  const unique = [...new Set(all)];
+  if (startText !== null && q === startText.trim().toLowerCase()) return unique.slice(0, limit);
+  return unique
+    .filter((s) => {
+      const v = s.toLowerCase();
+      if (v === q) return false;
+      return v.includes(q) || (keys ? keys(s).toLowerCase().includes(q) : false);
+    })
+    .slice(0, limit);
+}

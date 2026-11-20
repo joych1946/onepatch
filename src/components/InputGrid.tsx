@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Show } from "@/model/schema";
 import { COLUMNS, COL_INDEX, FIELD_TO_COL, type ColCtx, type ColKey, type Column } from "@/model/inputColumns";
 import { autoPatch } from "@/model/patch";
+import { filterSuggestions } from "@/model/sheet";
 import { formatRanges } from "@/model/outputOps";
 import {
   appendChannel,
@@ -30,12 +31,13 @@ import type { Library } from "@/model/library";
 import PickFlow from "./PickFlow";
 import { BlockPicker, SaveNameDialog } from "./TemplateDialogs";
 import { makeBlockTemplate, toTemplateChannels } from "@/model/templates";
-import { COLOR_LABEL, COLOR_SWATCH } from "@/model/labels";
-import type { Color, InputChannel } from "@/model/schema";
+import { COLOR_LABEL, COLOR_SWATCH, MIC_TYPE_LABEL } from "@/model/labels";
+import type { Color, InputChannel, MicType } from "@/model/schema";
 import type { ValidationIssue } from "./useShowDoc";
 
 type Pos = { r: number; c: number };
-type Edit = { mode: "enter" | "edit"; text: string; sug: number };
+/** start: 편집을 시작할 때의 칸 값 (그대로면 후보를 거르지 않음). 글자를 쳐서 시작했으면 null */
+type Edit = { mode: "enter" | "edit"; text: string; sug: number; start: string | null };
 
 const LAST_COL = COLUMNS.length - 1;
 const COL_WIDTH: Record<string, string> = {
@@ -89,6 +91,10 @@ export default function InputGrid({
   const setEdit = (e: Edit | null) => {
     editRef.current = e;
     setEditState(e);
+  };
+  const startEdit = (col: Column, ch: InputChannel | undefined) => {
+    const text = ch ? col.editText(show, ch) : "";
+    setEdit({ mode: "edit", text, sug: -1, start: text });
   };
   const [tabStart, setTabStart] = useState<number | null>(null);
   const [drop, setDrop] = useState<number | null>(null);
@@ -315,11 +321,7 @@ export default function InputGrid({
   const suggestions = (() => {
     const col = COLUMNS[a.c];
     if (!edit || !col.suggestions) return [];
-    const q = edit.text.trim().toLowerCase();
-    return col
-      .suggestions(show, ctx)
-      .filter((s) => s.toLowerCase().includes(q) && s.toLowerCase() !== q)
-      .slice(0, 8);
+    return filterSuggestions(col.suggestions(show, ctx), edit.text, edit.start, col.suggestionKeys?.(show, ctx));
   })();
 
   const nextAfterTab = (back: boolean) => {
@@ -465,7 +467,7 @@ export default function InputGrid({
         else if (col.toggle) toggleSelection();
         else {
           const ch = show.inputs[a.r];
-          setEdit({ mode: "edit", text: ch ? col.editText(show, ch) : "", sug: -1 });
+          startEdit(col, ch);
         }
         return;
       case " ":
@@ -505,7 +507,7 @@ export default function InputGrid({
       if (v !== undefined) setToggle(v);
       return;
     }
-    setEdit({ mode: "enter", text: value, sug: -1 });
+    setEdit({ mode: "enter", text: value, sug: -1, start: null });
   };
 
   /* ───────── 일괄 변경 툴바 ───────── */
@@ -568,6 +570,18 @@ export default function InputGrid({
     }
   };
 
+  // 일괄 변경용 마이크 목록: 이 Show에 있는 것 + 내 라이브러리, 종류별로 묶음
+  const batchMicGroups = (() => {
+    const byType = new Map<MicType, Set<string>>();
+    for (const m of [...show.microphones, ...(library?.microphones ?? [])]) {
+      if (!byType.has(m.type)) byType.set(m.type, new Set());
+      byType.get(m.type)!.add(m.model);
+    }
+    return (Object.keys(MIC_TYPE_LABEL) as MicType[]).flatMap((t) =>
+      byType.has(t) ? [[MIC_TYPE_LABEL[t], [...byType.get(t)!]] as [string, string[]]] : [],
+    );
+  })();
+
   const tool = "rounded border border-neutral-300 px-2 py-1 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800";
 
   return (
@@ -604,6 +618,27 @@ export default function InputGrid({
           <option value="" disabled>컬러…</option>
           {(Object.keys(COLOR_LABEL) as Color[]).map((c) => (
             <option key={c} value={c}>{COLOR_LABEL[c]}</option>
+          ))}
+        </select>
+        <select
+          className={tool}
+          value=""
+          disabled={!selRows.length}
+          title="선택한 채널의 마이크/DI를 한꺼번에 바꾸기"
+          aria-label="선택한 채널의 마이크/DI 바꾸기"
+          onChange={(e) => {
+            const text = e.target.value === "\u0000" ? "" : e.target.value;
+            batch((s, r) => COLUMNS[COL_INDEX.mic].set(s, r, text, ctx) ?? s);
+          }}
+        >
+          <option value="" disabled>마이크/DI…</option>
+          <option value={"\u0000"}>(비우기)</option>
+          {batchMicGroups.map(([label, models]) => (
+            <optgroup key={label} label={label}>
+              {models.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </optgroup>
           ))}
         </select>
         <select
@@ -747,6 +782,12 @@ export default function InputGrid({
                           if (isActive && editRef.current) return; // 편집 중인 입력창 안 클릭(커서 이동)
                           e.preventDefault(); // 브라우저가 포커스를 body로 옮기지 않게
                           if (col.key === "ch" && !e.shiftKey) return openPicker(r);
+                          // 이미 고른 칸을 다시 누르면 후보 목록을 연다 (마이크 → DI처럼 클릭만으로 바꾸기)
+                          if (isActive && !e.shiftKey && !edit && col.suggestions && ch) {
+                            startEdit(col, ch);
+                            focusGrid();
+                            return;
+                          }
                           if (editRef.current) commit(editRef.current.text, false);
                           moveTo(r, c, e.shiftKey);
                           setTabStart(null);
@@ -754,7 +795,7 @@ export default function InputGrid({
                         }}
                         onDoubleClick={() => {
                           if (col.toggle) return toggleSelection();
-                          setEdit({ mode: "edit", text: ch ? col.editText(show, ch) : "", sug: -1 });
+                          startEdit(col, ch);
                         }}
                         className={`relative h-8 border-l ${col.key === "ch" ? "cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-950/40" : ""} border-neutral-200 px-2 whitespace-nowrap dark:border-neutral-800 ${
                           inSel ? "bg-blue-50 dark:bg-blue-950/60" : ""
@@ -790,10 +831,11 @@ export default function InputGrid({
                               }`}
                             />
                             {edit && suggestions.length > 0 && (
-                              <ul className="absolute top-full left-0 z-20 mt-0.5 min-w-48 rounded border border-neutral-300 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
+                              <ul className="absolute top-full left-0 z-20 mt-0.5 max-h-72 min-w-48 overflow-y-auto rounded border border-neutral-300 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
                                 {suggestions.map((s, i) => (
                                   <li
                                     key={s}
+                                    ref={i === edit.sug ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
                                     onMouseDown={(e) => {
                                       e.preventDefault();
                                       e.stopPropagation();
