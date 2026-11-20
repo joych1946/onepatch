@@ -15,6 +15,9 @@ import { locate, parseSections, section, writeBit, writeString } from "@/export/
 import { consoleColor, DEFAULT_CONSOLE_PROFILE as P } from "@/export/profile";
 import { applyImportChanges, channelNotes, diffSnapshot, matchSource, showFromSnapshot } from "@/export/importShow";
 
+/** 48V "시트대로 켜기" — 10번 이전 동작. 기존 바이트 일치·실기 검증은 이 설정으로 확인한다 */
+const sheetOpts = (show: Show) => ({ ...defaultDm7Options(show), phantomMode: "sheet" as const });
+
 const lib = createDefaultLibrary();
 const DIR = process.env.DM7_SAMPLES ?? join(homedir(), "Documents/vender/dm7");
 const BASIC = join(DIR, "basic.dm7f.dmxf");
@@ -72,7 +75,7 @@ describe("소스 목록 찾기", () => {
 describe.skipIf(!existsSync(BASIC))("DM7 쇼 파일 읽기 (샘플 필요)", () => {
   it("왕복: OnePatch가 내보낸 파일을 다시 읽으면 원래 Show와 같은 내용", () => {
     const show = createSampleShow();
-    const opts = { ...defaultDm7Options(show), clearUnusedOutputs: true };
+    const opts = { ...sheetOpts(show), clearUnusedOutputs: true };
     const snap = readDm7(exported(show, opts), show.stageBoxes, opts.boxes);
     const base = { ...createEmptyShow("가져옴"), stageBoxes: show.stageBoxes };
     const { show: back, matches } = showFromSnapshot(snap, base, { skipDefault: true, sources: lib.sources, groups: lib.groups });
@@ -87,7 +90,7 @@ describe.skipIf(!existsSync(BASIC))("DM7 쇼 파일 읽기 (샘플 필요)", () 
 
   it("기본 이름 채널: 건너뛰기 / 모두 가져오기", () => {
     const show = createEmptyShow();
-    const opts = defaultDm7Options(show);
+    const opts = sheetOpts(show);
     const snap = readDm7(load(BASIC), show.stageBoxes, opts.boxes);
     expect(showFromSnapshot(snap, show, { skipDefault: true }).show.inputs).toHaveLength(0);
     const all = showFromSnapshot(snap, show, { skipDefault: false }).show;
@@ -97,7 +100,7 @@ describe.skipIf(!existsSync(BASIC))("DM7 쇼 파일 읽기 (샘플 필요)", () 
 
   it("콘솔 변경분: 콘솔에서 고친 것만 잡고, 고르면 반영한다 (마이크·스탠드·비고는 그대로)", () => {
     const show = createSampleShow();
-    const opts = { ...defaultDm7Options(show), clearUnusedOutputs: true };
+    const opts = { ...sheetOpts(show), clearUnusedOutputs: true };
     const file = exported(show, opts);
     // 콘솔에서 고친 것처럼: Ch1 이름, Ch2 컬러, Ch3 DCA 2 추가, Mix 1 이름, DCA 6 새 이름
     const cur = blockData(findBlock(file, "CurrentBackupFile.bup")!).slice();
@@ -133,7 +136,7 @@ describe.skipIf(!existsSync(BASIC))("DM7 쇼 파일 읽기 (샘플 필요)", () 
 describe.skipIf(!REAL)("실제 공연 파일 (IndieMusicDay MON, DM Editor 1.x)", () => {
   it("Show가 만들어진다: 채널·스테레오 Mix·소스 목록", () => {
     const base = createEmptyShow("IndieMusicDay MON");
-    const opts = defaultDm7Options(base);
+    const opts = sheetOpts(base);
     const snap = readDm7(load(REAL!), base.stageBoxes, opts.boxes);
     const { show, matches } = showFromSnapshot(snap, base, { skipDefault: true, sources: lib.sources, groups: lib.groups });
     expect(ShowSchema.safeParse(show).success).toBe(true);

@@ -14,7 +14,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Color } from "@/model/schema";
 import { buildDm7File, Dm7FormatError, parseDm7File, type Dm7File } from "@/export/dm7/container";
-import { applyDm7, defaultDm7Options, DM7_ITEMS, planDm7, type Dm7Options, type Dm7Plan } from "@/export/dm7/dm7Export";
+import { applyDm7, defaultDm7Options, DM7_ITEMS, PHANTOM_MODES, PHANTOM_SHEET_WARNING, planDm7, type Dm7Options, type Dm7Plan, type PhantomMode } from "@/export/dm7/dm7Export";
 import { dm7FileInfo, type Dm7FileInfo } from "@/export/dm7/fileInfo";
 import { consoleTasks } from "@/export/dm7/tasks";
 import { applyNameFix, exportChecks, type ExportCheck } from "@/export/checks";
@@ -325,13 +325,39 @@ export default function ConsoleExportView({ id }: { id: string }) {
       <section className={step}>
         <h2 className="mb-2 font-semibold">3. 바꿀 항목</h2>
         <div className="flex flex-wrap gap-x-5 gap-y-2">
-          {DM7_ITEMS.map((it) => (
+          {DM7_ITEMS.filter((it) => it.key !== "phantom").map((it) => (
             <label key={it.key} className="flex items-center gap-1.5">
               <input type="checkbox" checked={opts.items[it.key]} onChange={(e) => update({ ...opts, items: { ...opts.items, [it.key]: e.target.checked } })} />
               {it.label}
               {it.note && <span className="text-xs text-neutral-500">({it.note})</span>}
             </label>
           ))}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1.5">
+            48V 처리
+            <select
+              className="rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+              value={opts.items.phantom ? (opts.phantomMode ?? "off") : "keep"}
+              onChange={(e) => {
+                const mode = e.target.value as PhantomMode;
+                update({ ...opts, phantomMode: mode, items: { ...opts.items, phantom: mode !== "keep" } });
+              }}
+              aria-label="48V 처리"
+            >
+              {PHANTOM_MODES.map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="text-xs text-neutral-500">{PHANTOM_MODES.find((m) => m.key === (opts.items.phantom ? (opts.phantomMode ?? "off") : "keep"))?.note}</span>
+          {opts.items.phantom && opts.phantomMode === "sheet" && (
+            <p role="alert" className="w-full rounded border border-amber-400 bg-amber-50 px-2 py-1 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+              ⚠ {PHANTOM_SHEET_WARNING}
+            </p>
+          )}
         </div>
         {opts.items.outPatch && (
           <label className="mt-2 flex items-center gap-1.5">

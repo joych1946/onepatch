@@ -18,6 +18,8 @@ import {
   micTypeLabel,
   OUTPUT_REPORT_COLUMNS,
   outputReportSections,
+  phantomChecklist,
+  PHANTOM_CHECK_COLUMNS,
   type LabelSheet,
   type ReportColumn,
 } from "@/model/reports";
@@ -32,11 +34,12 @@ import { localizeShow, type SourceLang } from "@/model/library";
 import { PagedTable, type Orientation, type PagedItem } from "./Paged";
 import { CableLabels, PatchSheets, StripLabels } from "./Docs";
 
-type Doc = "inputs" | "outputs" | "patch" | "summary" | "cable" | "strip" | "tasks" | "changes";
+type Doc = "inputs" | "outputs" | "patch" | "phantom" | "summary" | "cable" | "strip" | "tasks" | "changes";
 const DOCS: { id: Doc; name: string; orientation: Orientation }[] = [
   { id: "inputs", name: "인풋리스트", orientation: "landscape" },
   { id: "outputs", name: "아웃풋 리스트", orientation: "landscape" },
   { id: "patch", name: "패치 시트", orientation: "landscape" },
+  { id: "phantom", name: "48V 체크리스트", orientation: "portrait" },
   { id: "summary", name: "장비 집계표", orientation: "portrait" },
   { id: "strip", name: "콘솔 스트립 라벨", orientation: "landscape" },
   { id: "cable", name: "멀티케이블 라벨", orientation: "portrait" },
@@ -278,6 +281,16 @@ export default function PrintView({ id }: { id: string }) {
     }
     return rows;
   }, [changeDiff]);
+  const phantomItems = useMemo<PagedItem[]>(() => {
+    if (!show) return [];
+    const { on, never } = phantomChecklist(show);
+    const rows = (list: typeof on) => list.map((r) => ({ kind: "row" as const, cells: r.cells, color: r.color }));
+    return [
+      { kind: "section", title: `48V 켜기 — ${on.length}채널 (마이크·DI를 꽂은 뒤, 포트 순서)` },
+      ...(on.length ? rows(on) : [{ kind: "row" as const, cells: { source: "48V가 필요한 채널이 없습니다." } }]),
+      ...(never.length ? [{ kind: "section" as const, title: `48V 걸면 안 됨 — ${never.length}채널 (리본 등)` }, ...rows(never)] : []),
+    ];
+  }, [show]);
   const taskItems = useMemo<PagedItem[]>(() => {
     if (!show) return [];
     const tasks = consoleTasks(show, DEFAULT_CONSOLE_PROFILE);
@@ -394,6 +407,18 @@ export default function PrintView({ id }: { id: string }) {
           <PagedTable show={show} docName="아웃풋 리스트" extra={`${show.outputs.length}개 버스`} orientation="landscape" columns={outputCols} items={outputItems} fontPt={s.fontPt} printedAt={printedAt} note={versionNote(true)} />
         )}
         {d === "patch" && <PatchSheets show={show} printedAt={printedAt} />}
+        {d === "phantom" && (
+          <PagedTable
+            show={show}
+            docName="48V 체크리스트"
+            extra="팬텀이 필요한 채널만"
+            orientation="portrait"
+            columns={PHANTOM_CHECK_COLUMNS}
+            items={phantomItems}
+            fontPt={10}
+            printedAt={printedAt}
+          />
+        )}
         {d === "summary" && (
           <PagedTable
             show={show}
@@ -610,7 +635,7 @@ export default function PrintView({ id }: { id: string }) {
           )}
         </div>
         <p className="text-[11px] text-neutral-500">
-          인쇄 창에서 대상 “PDF로 저장”, 배율 100%(기본), 여백 “없음” 또는 “기본”을 고르세요. 미리보기의 쪽 구성이 그대로 인쇄됩니다. 숫자 1~8로 출력물 전환.
+          인쇄 창에서 대상 “PDF로 저장”, 배율 100%(기본), 여백 “없음” 또는 “기본”을 고르세요. 미리보기의 쪽 구성이 그대로 인쇄됩니다. 숫자 1~9로 출력물 전환.
         </p>
       </div>
 

@@ -10,7 +10,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { blockData, buildDm7File, findBlock, parseDm7File, type Dm7File } from "@/export/dm7/container";
-import { locate, parseSections, section } from "@/export/dm7/mbdf";
+import { locate, parseSections, readBit, section } from "@/export/dm7/mbdf";
 import { allocateBuses, applyDm7, defaultDm7Options, planDm7, type Dm7Item } from "@/export/dm7/dm7Export";
 import { exportChecks } from "@/export/checks";
 import { createSampleShow } from "@/sample/fivePieceBand";
@@ -18,6 +18,9 @@ import { busAccess, rowOps, updateBus } from "@/model/outputOps";
 import { createEmptyShow } from "@/model/factory";
 import { newChannel } from "@/model/inputOps";
 import type { Color, InputChannel, Show } from "@/model/schema";
+
+/** 48V "시트대로 켜기" — 10번 이전 동작. 기존 바이트 일치·실기 검증은 이 설정으로 확인한다 */
+const sheetOpts = (show: Show) => ({ ...defaultDm7Options(show), phantomMode: "sheet" as const });
 
 const DIR = process.env.DM7_SAMPLES ?? join(homedir(), "Documents/vender/dm7");
 const file = (n: string) => join(DIR, `${n}.dm7f.dmxf`);
@@ -91,7 +94,7 @@ describe.skipIf(!have)("DM7 쇼 파일 (샘플 필요)", () => {
     it(`DM Editor에서 직접 바꾼 결과(${stage})와 같은 데이터를 만든다`, () => {
       const base = load("basic");
       const show = showFor(stage);
-      const opts = { ...defaultDm7Options(show), items: itemsFor(stage) };
+      const opts = { ...sheetOpts(show), items: itemsFor(stage) };
       const plan = planDm7(show, base, opts);
       const expected = current(load(stage));
       const got = plan.current;
@@ -109,7 +112,7 @@ describe.skipIf(!have)("DM7 쇼 파일 (샘플 필요)", () => {
     const show = showFor("48V_dante");
     show.inputs[0].shortName = "KickInsideMic"; // 8자 넘음
     show.inputs.push({ ...newChannel(80), shortName: "far" }); // DM7C 72채널 밖
-    const plan = planDm7(show, base, { ...defaultDm7Options(show), items: { ...itemsFor("48V_dante") } });
+    const plan = planDm7(show, base, { ...sheetOpts(show), items: { ...itemsFor("48V_dante") } });
     const fields = plan.changes.map((c) => `${c.ch} ${c.field}: ${c.before} → ${c.after}`);
     expect(fields).toContain("1 이름: ch 1 → KickInsi");
     expect(fields).toContain("2 패치: OMNI 2 → Dante 2");
@@ -133,7 +136,7 @@ describe.skipIf(!haveOut)("DM7 아웃풋 패치 (샘플 필요)", () => {
     show = updateBus(show, "main", 0, { ports: [{ kind: "local", port: 2 }, { kind: "local", port: 3 }] });
     show = rowOps(busAccess("matrix")).append(show);
     show = updateBus(show, "matrix", 0, { ports: [{ kind: "local", port: 1 }] });
-    const plan = planDm7(show, load("basic"), { ...defaultDm7Options(show), items: onlyOut });
+    const plan = planDm7(show, load("basic"), { ...sheetOpts(show), items: onlyOut });
     const expected = current(parseDm7File(new Uint8Array(readFileSync(join(DIR, "outpatch2.dmxf")))));
     expect(Buffer.from(body(plan.current)).equals(Buffer.from(body(expected)))).toBe(true);
     expect(plan.changes.map((c) => `${c.target} ${c.before} → ${c.after}`)).toEqual([
@@ -148,7 +151,7 @@ describe.skipIf(!haveOut)("DM7 아웃풋 패치 (샘플 필요)", () => {
     const rio = show.stageBoxes[0].id;
     show = rowOps(busAccess("aux")).append(rowOps(busAccess("aux")).append(show));
     show = updateBus(show, "aux", 1, { ports: [{ kind: "stagebox", stageBoxId: rio, port: 1 }] });
-    const plan = planDm7(show, load("basic"), { ...defaultDm7Options(show), items: onlyOut });
+    const plan = planDm7(show, load("basic"), { ...sheetOpts(show), items: onlyOut });
     const expected = current(parseDm7File(new Uint8Array(readFileSync(join(DIR, "outpatch.dmxf")))));
     const at = locate(section(parseSections(expected), "Processing"), ["Dante", ["OutputPort", 0], "Patch", "Source"]).pos;
     expect([...plan.current.subarray(at, at + 4)]).toEqual([...expected.subarray(at, at + 4)]);
@@ -158,7 +161,7 @@ describe.skipIf(!haveOut)("DM7 아웃풋 패치 (샘플 필요)", () => {
   it.skipIf(!existsSync(join(DIR, "outpatch3.dmxf")))("Mono/Sub(둘째 Main) → Stereo B → OMNI OUT 1: DM Editor 결과와 바이트까지 같다", () => {
     let show = createEmptyShow();
     show = updateBus(show, "main", 1, { ports: [{ kind: "local", port: 1 }] });
-    const plan = planDm7(show, load("basic"), { ...defaultDm7Options(show), items: onlyOut });
+    const plan = planDm7(show, load("basic"), { ...sheetOpts(show), items: onlyOut });
     const expected = current(parseDm7File(new Uint8Array(readFileSync(join(DIR, "outpatch3.dmxf")))));
     expect(Buffer.from(body(plan.current)).equals(Buffer.from(body(expected)))).toBe(true);
     expect(plan.changes.map((c) => `${c.target} ${c.before} → ${c.after}`)).toEqual(["OMNI OUT 1 Mix 1 → Stereo B L"]);
@@ -166,7 +169,7 @@ describe.skipIf(!haveOut)("DM7 아웃풋 패치 (샘플 필요)", () => {
 
   it("쓰지 않는 출력 비우기: 박스 범위와 OMNI OUT만", () => {
     const show = createSampleShow();
-    const plan = planDm7(show, load("basic"), { ...defaultDm7Options(show), items: onlyOut, clearUnusedOutputs: true });
+    const plan = planDm7(show, load("basic"), { ...sheetOpts(show), items: onlyOut, clearUnusedOutputs: true });
     const cleared = plan.changes.filter((c) => c.after === "없음").map((c) => c.target);
     expect(cleared).toContain("Dante OUT 14"); // Rio3224 출력 14번은 비어 있음
     expect(cleared.some((t) => /Dante OUT (2[5-9]|[3-9]\d)/.test(t ?? ""))).toBe(false); // 박스 범위(1–24) 밖은 건드리지 않음
@@ -196,7 +199,7 @@ describe.skipIf(!have || !existsSync(BUSNAME))("DM7 버스·DCA·뮤트 이름 (
     show = updateBus(show, "main", 1, { name: "" });
     show = { ...show, dcas: [{ id: "d1", number: 1, name: "DRUMS" }], muteGroups: [{ id: "m1", number: 1, name: "BUSMANE" }] };
     const items = { ...onlyOut, outPatch: false, busNames: true };
-    const plan = planDm7(show, load("basic"), { ...defaultDm7Options(show), items });
+    const plan = planDm7(show, load("basic"), { ...sheetOpts(show), items });
     const expected = current(parseDm7File(new Uint8Array(readFileSync(BUSNAME))));
     const mute = locate(section(parseSections(expected), "Mixing"), [["Mix", 0], "MuteGroup", "Assign"]).pos;
     const diff = [...body(plan.current)].flatMap((v, i) => (v !== body(expected)[i] ? [i + 0x48] : []));
@@ -211,7 +214,7 @@ describe.skipIf(!have || !existsSync(BUSNAME))("DM7 버스·DCA·뮤트 이름 (
   it("샘플 Show: 스테레오 버스는 두 Mix 모두, Main은 Stereo A L/R, 8자 넘으면 자르기", () => {
     const show = updateBus(createSampleShow(), "aux", 0, { name: "Lead Vo Wedge" });
     const items = { ...onlyOut, outPatch: false, busNames: true };
-    const plan = planDm7(show, load("basic"), { ...defaultDm7Options(show), items });
+    const plan = planDm7(show, load("basic"), { ...sheetOpts(show), items });
     const names = plan.changes.map((c) => `${c.target}=${c.after}`);
     expect(names).toEqual(expect.arrayContaining(["Mix 1=Lead Vo", "Mix 5=Drum IEM", "Mix 6=Drum IEM", "Stereo A L=Main LR", "Stereo A R=Main LR", "DCA 1=Drums", "뮤트 그룹 1=Band"]));
     expect(plan.warnings).toEqual([]);
@@ -236,7 +239,7 @@ describe.skipIf(!haveRio)("DM7 Rio 연결 샘플 (8-C, 샘플 필요)", () => {
 
   it("Rio UNIT ID #1 = I/O 유닛 1: 기본 설정으로 Ch1 → Dante 1 + Rio 1번 48V가 콘솔 저장 결과와 같다", () => {
     const show = rioShow();
-    const opts = defaultDm7Options(show);
+    const opts = sheetOpts(show);
     expect(opts.boxes[show.stageBoxes[0].id].ioUnit).toBe(1);
     const plan = planDm7(show, loadRio("rio_base"), { ...opts, items: { ...none, patch: true, phantom: true } });
     const expected = current(loadRio("rio_48V_1"));
@@ -246,9 +249,41 @@ describe.skipIf(!haveRio)("DM7 Rio 연결 샘플 (8-C, 샘플 필요)", () => {
     expect(p.pos).toBe(0x49790);
   });
 
+  /* 10번: 48V 처리 */
+  const bitsAt = (cur: Uint8Array) => {
+    const secs = parseSections(cur);
+    return [
+      readBit(cur, locate(section(secs, "Mixing"), ["DanteRemoteControl", ["IOUnit", 0], ["InputPort", 0], "HeadAmp", "48V"])),
+      readBit(cur, locate(section(secs, "Processing"), ["Omni", ["InputPort", 4], "HeadAmp", "48V"])),
+    ];
+  };
+  it("48V 기본값(끄기): 48V가 켜진 기준 파일로 내보내면 패치된 포트(Rio 1, OMNI 5)의 48V가 모두 꺼진다", () => {
+    const show = rioShow(true);
+    const base = loadRio("rio_48V_5");
+    expect(bitsAt(current(base))).toEqual([true, true]);
+    const opts = defaultDm7Options(show);
+    expect(opts.phantomMode).toBe("off");
+    const plan = planDm7(show, base, opts);
+    expect(bitsAt(plan.current)).toEqual([false, false]);
+    expect(plan.changes.filter((c) => c.item === "phantom").map((c) => `${c.field} ${c.before}→${c.after}`)).toEqual([
+      "48V (I/O 유닛 1 포트 1) 켜짐→꺼짐",
+      "48V (OMNI 5) 켜짐→꺼짐",
+    ]);
+    expect(plan.warnings.some((w) => w.includes("팬텀"))).toBe(false);
+  });
+  it("48V 그대로 두기: 기준 파일의 48V를 건드리지 않는다 / 시트대로 켜기: 경고", () => {
+    const show = rioShow(true);
+    const keep = planDm7(show, loadRio("rio_48V_5"), { ...defaultDm7Options(show), phantomMode: "keep" });
+    expect(bitsAt(keep.current)).toEqual([true, true]);
+    expect(keep.changes.some((c) => c.item === "phantom")).toBe(false);
+    const sheet = planDm7(show, loadRio("rio_base"), { ...defaultDm7Options(show), phantomMode: "sheet" });
+    expect(bitsAt(sheet.current)).toEqual([true, true]);
+    expect(sheet.warnings.some((w) => w.includes("마이크 연결 전에 팬텀이 걸립니다"))).toBe(true);
+  });
+
   it("OMNI 5 48V (rio_48V_5 샘플에서 함께 켜진 것)도 같은 자리에 쓴다", () => {
     const show = rioShow(true);
-    const plan = planDm7(show, loadRio("rio_48V_1"), { ...defaultDm7Options(show), items: { ...none, phantom: true } });
+    const plan = planDm7(show, loadRio("rio_48V_1"), { ...sheetOpts(show), items: { ...none, phantom: true } });
     expect(body(plan.current)).toEqual(body(current(loadRio("rio_48V_5"))));
   });
 });

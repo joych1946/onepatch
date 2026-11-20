@@ -6,6 +6,7 @@
 import type { Show } from "@/model/schema";
 import { micName, resolvePhantom } from "@/model/derive";
 import { BUS_PURPOSE_LABEL } from "@/model/labels";
+import { phantomChecklist } from "@/model/reports";
 import { busesOf } from "@/model/outputOps";
 import { DEFAULT_CONSOLE_PROFILE, type ConsoleProfile } from "../profile";
 import { allocateBuses } from "./dm7Export";
@@ -31,6 +32,22 @@ export function consoleTasks(show: Show, profile: ConsoleProfile = DEFAULT_CONSO
   if (names.some((n) => /[^\x20-\x7e]/.test(n))) add("준비", "SETUP", "Name Language를 한국어로", "한글 이름이 있음");
   const over = show.inputs.filter((c) => c.number > profile.inputs);
   if (over.length) add("준비", `Ch ${over.map((c) => c.number).join(", ")}`, `${profile.name} 인풋 ${profile.inputs}채널을 넘어 파일에 넣지 못함 — 다른 방법으로 처리`);
+
+  /* 48V: 내보내기 기본값은 끄기 — 마이크를 꽂은 뒤 체크리스트대로 켠다 */
+  const phantom = phantomChecklist(show);
+  if (phantom.on.length)
+    add(
+      "인풋 (사운드체크)",
+      "48V",
+      `48V 켜기 ${phantom.on.length}채널 — 48V 체크리스트 참고`,
+      [
+        "마이크·DI를 모두 꽂은 뒤",
+        phantom.never.length ? `리본 등 ${phantom.never.length}채널(Ch ${phantom.never.map((r) => r.cells.ch).join(", ")})은 켜지 않음` : "",
+        "내보내기에서 “시트대로 켜기”를 골랐다면 이미 켜져 있음",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    );
 
   /* 인풋: 채널마다 게인·HPF·EQ·다이내믹스 */
   for (const ch of show.inputs) {

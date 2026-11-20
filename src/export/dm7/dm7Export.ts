@@ -38,7 +38,7 @@ export const DM7_ITEMS: { key: Dm7Item; label: string; note?: string }[] = [
   { key: "color", label: "컬러" },
   { key: "icon", label: "아이콘", note: "소스 목록·소스명으로 자동, 맞는 것이 없으면 Blank" },
   { key: "patch", label: "인풋 패치", note: "Bank A" },
-  { key: "phantom", label: "48V", note: "포트 단위" },
+  { key: "phantom", label: "48V 처리", note: "포트 단위" },
   { key: "pair", label: "스테레오 페어" },
   { key: "dca", label: "DCA 배정" },
   { key: "mute", label: "뮤트 그룹 배정" },
@@ -55,8 +55,24 @@ export interface Dm7BoxSetting {
   danteOutStart?: number | null;
 }
 
+/**
+ * 48V 처리 (items.phantom이 켜져 있을 때)
+ * - off:   OnePatch가 인풋에 패치하는 포트(OMNI, Dante I/O)의 48V를 모두 끈다 (기본 — 마이크를 꽂기 전에 팬텀이 걸리지 않게)
+ * - keep:  기준 파일의 48V를 건드리지 않는다
+ * - sheet: 시트의 48V대로 켜고 끈다
+ */
+export type PhantomMode = "off" | "keep" | "sheet";
+export const PHANTOM_MODES: { key: PhantomMode; label: string; note: string }[] = [
+  { key: "off", label: "끄기 (기본)", note: "OnePatch가 패치하는 포트의 48V를 모두 끔 — 마이크를 꽂은 뒤 콘솔에서 48V 체크리스트대로 켜기" },
+  { key: "keep", label: "그대로 두기", note: "기준 파일의 48V 상태를 건드리지 않음" },
+  { key: "sheet", label: "시트대로 켜기", note: "시트에서 48V인 채널의 포트를 켬" },
+];
+export const PHANTOM_SHEET_WARNING = "마이크 연결 전에 팬텀이 걸립니다. 쇼 파일을 불러오는 순간 48V가 켜지므로, 리본·다이내믹·라인 장비를 꽂기 전인지 확인하세요.";
+
 export interface Dm7Options {
   items: Record<Dm7Item, boolean>;
+  /** 48V 처리. 없으면 "off" */
+  phantomMode?: PhantomMode;
   boxes: Record<string, Dm7BoxSetting>;
   /** 아웃풋 패치: OnePatch가 다루는 출력 포트(OMNI OUT, 박스의 Dante OUT 범위) 중 쓰지 않는 포트는 "없음"으로 */
   clearUnusedOutputs?: boolean;
@@ -82,6 +98,7 @@ export function defaultDm7Options(show: Show): Dm7Options {
     items: { name: true, color: true, icon: true, patch: true, phantom: true, pair: true, dca: true, mute: true, outPatch: true, busNames: true },
     boxes,
     clearUnusedOutputs: false,
+    phantomMode: "off",
   };
 }
 
@@ -188,6 +205,8 @@ export function planDm7(show: Show, file: Dm7File, opts: Dm7Options, ctx: Dm7Con
     changes.push(c);
   };
   const I = opts.items;
+  const phantomMode: PhantomMode = opts.phantomMode ?? "off";
+  if (I.phantom && phantomMode === "sheet") warn(`48V 시트대로 켜기: ${PHANTOM_SHEET_WARNING}`);
   const chField = (n: number, ...path: string[]) => locate(mixing, [["InputChannel", n - 1], ...path]);
 
   const inRange = show.inputs.filter((c) => c.number >= 1 && c.number <= maxChannels);
@@ -235,7 +254,7 @@ export function planDm7(show: Show, file: Dm7File, opts: Dm7Options, ctx: Dm7Con
       }
       set("patch", "패치", sourceLabel(readUint(cur, src)), target.label, () => writeUint(cur, src, target.source));
     }
-    if (I.phantom && target && target !== "unmapped") {
+    if (I.phantom && phantomMode !== "keep" && target && target !== "unmapped") {
       if (!target.phantom) warn("48V: I/O 유닛 번호가 비어 있는 스테이지박스의 48V는 쓰지 않았습니다.");
       else {
         const p = target.phantom;
@@ -244,7 +263,7 @@ export function planDm7(show: Show, file: Dm7File, opts: Dm7Options, ctx: Dm7Con
             ? locate(processing, ["Omni", ["InputPort", p.port - 1], "HeadAmp", "48V"])
             : locate(mixing, ["DanteRemoteControl", ["IOUnit", p.unit - 1], ["InputPort", p.port - 1], "HeadAmp", "48V"]);
         const key = `${p.kind}:${p.kind === "dante" ? p.unit : 0}:${p.port}`;
-        const on = resolvePhantom(show, ch);
+        const on = phantomMode === "sheet" && resolvePhantom(show, ch);
         const prev = phantomPorts.get(key);
         if (prev && prev.on !== on) warn(`${target.label}: 같은 포트를 쓰는 채널의 48V가 서로 달라 켜짐으로 했습니다.`);
         phantomPorts.set(key, {

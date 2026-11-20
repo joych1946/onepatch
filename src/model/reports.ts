@@ -316,3 +316,55 @@ export function toCsv(columns: ReportColumn[], rows: ReportRow[]): string {
   const lines = [columns.map((c) => csvCell(c.label)).join(","), ...rows.map((r) => columns.map((c) => csvCell(r.cells[c.key] ?? "")).join(","))];
   return "﻿" + lines.join("\r\n") + "\r\n";
 }
+
+/* ───────────── 48V 체크리스트 ───────────── */
+
+export const PHANTOM_CHECK_COLUMNS: ReportColumn[] = [
+  { key: "check", label: "✓", width: 5, align: "center" },
+  { key: "port", label: "포트", width: 16 },
+  { key: "ch", label: "Ch", width: 6, align: "center" },
+  { key: "source", label: "소스", width: 30 },
+  { key: "mic", label: "마이크/DI", width: 30 },
+];
+
+/** 포트 순서: 박스(표 순서) → 콘솔 본체(OMNI) → Dante 직결 → 기타 → 패치 안 함 */
+function portOrder(show: Show, c: Show["inputs"][number]): [number, number, string] {
+  const p = c.port;
+  if (!p) return [show.stageBoxes.length + 3, c.number, ""];
+  if (p.kind === "stagebox") {
+    const i = show.stageBoxes.findIndex((b) => b.id === p.stageBoxId);
+    return [i < 0 ? show.stageBoxes.length : i, p.port, ""];
+  }
+  if (p.kind === "local") return [show.stageBoxes.length, p.port, ""];
+  if (p.kind === "dante") return [show.stageBoxes.length + 1, p.port, ""];
+  return [show.stageBoxes.length + 2, 0, p.label];
+}
+
+/**
+ * 48V 체크리스트: 팬텀이 필요한 채널만 포트 순서로 (마이크를 꽂은 뒤 콘솔에서 켜며 체크).
+ * 리본처럼 48V를 걸면 안 되는 채널은 따로 묶는다.
+ */
+export function phantomChecklist(show: Show): { on: ReportRow[]; never: ReportRow[] } {
+  const row = (c: Show["inputs"][number], check: string): ReportRow => ({
+    id: c.id,
+    color: c.color,
+    cells: { check, port: c.port ? formatPort(c.port, show.stageBoxes) : "(패치 안 함)", ch: c.number, source: c.source, mic: micName(show, c) },
+  });
+  const sorted = show.inputs
+    .filter((c) => c.source.trim() || c.mic || c.port)
+    .slice()
+    .sort((a, b) => {
+      const [x1, y1, z1] = portOrder(show, a);
+      const [x2, y2, z2] = portOrder(show, b);
+      return x1 - x2 || y1 - y2 || z1.localeCompare(z2) || a.number - b.number;
+    });
+  const isRibbon = (c: Show["inputs"][number]) => {
+    const ref = c.mic;
+    const m = ref?.kind === "library" ? show.microphones.find((x) => x.id === ref.microphoneId) : undefined;
+    return m?.type === "ribbon" && m.needsPhantom !== true;
+  };
+  return {
+    on: sorted.filter((c) => resolvePhantom(show, c) && !isRibbon(c)).map((c) => row(c, "☐")),
+    never: sorted.filter(isRibbon).map((c) => row(c, "✕")),
+  };
+}
